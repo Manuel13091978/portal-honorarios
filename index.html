@@ -90,8 +90,7 @@
 <script type="text/babel">
 const { useState, useRef } = React;
 
-const CLIENT_ID   = "256837b8-0718-4669-a33d-19dda2bb111e";
-const TENANT_ID   = "3c0c532f-0aa8-42ac-a012-5f9e48f55cf8";
+const GOOGLE_CLIENT_ID = "86326256028-co8gidrh6j0o7lnrl41q5nljbue303f3.apps.googleusercontent.com";
 const ADMIN_PASS  = "admin2024";
 const FOLDER_ROOT = "Boletas_Honorarios";
 const JEFE        = "Manuel Carrasco";
@@ -157,12 +156,13 @@ function isProxima(str){
 function parseExcelRows(rows){
   return rows.map(r=>{
     const rut       =String(col(r,"Rut","RUT","rut")||"");
-    const nombre    =String(col(r,"NOMBRE","Nombre","nombre")||"");
+    const nombre    =String(col(r,"NOMBRE ENCUESTADOR","NOMBRE","Nombre","nombre")||"");
     const proyecto  =String(col(r,"PROYECTO","Proyecto","proyecto")||"");
-    const periodo   =String(col(r,"PERIODO","Período de Pago","periodo","Periodo")||"");
-    const monto     =Number(String(col(r,"MONTO","Monto","monto","Valor total bruto")||"0").replace(/[^0-9.-]/g,""))||0;
-    const encuestas =Number(col(r,"Cantidad","CANTIDAD","encuestas","Encuestas")||0);
-    const empresa   =String(col(r,"Empresa","EMPRESA","empresa")||proyecto);
+    const periodo   =String(col(r,"PERIODO PAGO","PERIODO","Período de Pago","periodo")||"");
+    const montoUnit =Number(String(col(r,"MONTO UNITARIO","Monto Unitario","monto_unitario")||"0").replace(/[^0-9.-]/g,""))||0;
+    const monto     =Number(String(col(r,"MONTO BOLETA","MONTO","Monto","monto","Valor total bruto")||"0").replace(/[^0-9.-]/g,""))||montoUnit||0;
+    const encuestas =Number(col(r,"CANTIDAD ENCUESTAS","Cantidad","CANTIDAD","encuestas")||0);
+    const empresa   =String(col(r,"Empresa","EMPRESA","empresa")||"");
     const empresaRUT=String(col(r,"RUT EMPRESA","Rut Empresa","rut_empresa")||"");
     const empresaDir=String(col(r,"Dirección Empresa","direccion_empresa","DIRECCION")||"");
     const contrato  =String(col(r,"Contrato Firmado","contrato_firmado","CONTRATO")||"NO").toUpperCase()==="SI";
@@ -177,18 +177,20 @@ function parseExcelRows(rows){
 
 function descargarExcel(data){
   const rows=data.map(r=>({
-    "RUT":r.rut,
-    "NOMBRE":r.nombre,
     "PROYECTO":r.proyecto,
-    "PERIODO":r.periodo,
-    "MONTO":r.monto,
-    "ENCUESTAS":r.encuestas,
-    "EMPRESA":r.empresa,
+    "PERIODO PAGO":r.periodo,
+    "NOMBRE ENCUESTADOR":r.nombre,
+    "Rut":r.rut,
+    "CANTIDAD ENCUESTAS":r.encuestas,
+    "MONTO BOLETA":r.monto,
+    "Empresa":r.empresa,
     "RUT EMPRESA":r.empresaRUT,
-    "CONTRATO FIRMADO":r.contrato?"SI":"NO",
-    "TIPO CUENTA":r.tipoCuenta,
-    "BANCO":r.banco,
-    "NUMERO CUENTA":r.numCuenta,
+    "Dirección Empresa":r.empresaDir,
+    "Tipo Cuenta":r.tipoCuenta,
+    "Banco":r.banco,
+    "Cuenta":r.numCuenta,
+    "Contrato Firmado":r.contrato?"SI":"NO",
+    "Fecha Tope":r.fechaTope,
     "N° BOLETA":r.numBoleta,
     "BOLETA SUBIDA":r.boleta?"SI":"NO",
   }));
@@ -200,12 +202,13 @@ function descargarExcel(data){
 
 async function getToken(){
   return new Promise((resolve,reject)=>{
-    const url=`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize`
-      +`?client_id=${CLIENT_ID}&response_type=token`
-      +`&redirect_uri=${encodeURIComponent(getRedirectUri())}`
-      +`&scope=${encodeURIComponent("Files.ReadWrite.All User.Read")}`
-      +`&response_mode=fragment&prompt=select_account`;
-    const popup=window.open(url,"msauth","width=520,height=660,left=200,top=80");
+    const url="https://accounts.google.com/o/oauth2/v2/auth"
+      +"?client_id="+GOOGLE_CLIENT_ID
+      +"&response_type=token"
+      +"&redirect_uri="+encodeURIComponent(getRedirectUri())
+      +"&scope="+encodeURIComponent("https://www.googleapis.com/auth/drive.file")
+      +"&prompt=consent";
+    const popup=window.open(url,"gauth","width=520,height=660,left=200,top=80");
     if(!popup){reject(new Error("El navegador bloqueó la ventana emergente."));return;}
     const timer=setInterval(()=>{
       try{
@@ -219,17 +222,35 @@ async function getToken(){
   });
 }
 
-async function ensureFolders(token,mesCarpeta){
+async function getOrCreateFolder(token, name, parentId=null){
   const h={Authorization:`Bearer ${token}`,"Content-Type":"application/json"};
-  await fetch("https://graph.microsoft.com/v1.0/me/drive/root/children",{method:"POST",headers:h,body:JSON.stringify({name:FOLDER_ROOT,folder:{},["@microsoft.graph.conflictBehavior"]:"replace"})});
-  await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${FOLDER_ROOT}:/children`,{method:"POST",headers:h,body:JSON.stringify({name:mesCarpeta,folder:{},["@microsoft.graph.conflictBehavior"]:"replace"})});
+  const q=parentId
+    ?`name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
+    :`name='${name}' and mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`;
+  const search=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,{headers:h});
+  const data=await search.json();
+  if(data.files&&data.files.length>0) return data.files[0].id;
+  const meta={name,mimeType:"application/vnd.google-apps.folder"};
+  if(parentId) meta.parents=[parentId];
+  const create=await fetch("https://www.googleapis.com/drive/v3/files",{method:"POST",headers:h,body:JSON.stringify(meta)});
+  const folder=await create.json();
+  return folder.id;
+}
+
+async function ensureFolders(token,mesCarpeta){
+  const rootId=await getOrCreateFolder(token,FOLDER_ROOT);
+  const mesId=await getOrCreateFolder(token,mesCarpeta,rootId);
+  return mesId;
 }
 
 async function uploadPDF(token,fileData,fileName,mesCarpeta){
-  await ensureFolders(token,mesCarpeta);
-  const res=await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${FOLDER_ROOT}/${mesCarpeta}/${fileName}:/content`,{
-    method:"PUT",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/pdf"},body:fileData
-  });
+  const mesId=await ensureFolders(token,mesCarpeta);
+  const h={Authorization:`Bearer ${token}`};
+  const meta=JSON.stringify({name:fileName,parents:[mesId]});
+  const form=new FormData();
+  form.append("metadata",new Blob([meta],{type:"application/json"}));
+  form.append("file",new Blob([fileData],{type:"application/pdf"}));
+  const res=await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",{method:"POST",headers:h,body:form});
   if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Error ${res.status}`);}
   return await res.json();
 }
@@ -325,7 +346,7 @@ function AdminPanel({data,setData,token,setToken,onLogout}){
     <header className="site-header">
       <div className="logo"><div className="logo-icon"><i className="ti ti-report-money" style={{fontSize:18,color:"white"}} aria-hidden="true"></i></div>Portal Honorarios</div>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
-        {token?<span className="badge badge-success" style={{fontSize:11}}><i className="ti ti-brand-onedrive" aria-hidden="true"></i> OneDrive activo</span>:<span className="badge badge-warning" style={{fontSize:11}}><i className="ti ti-brand-onedrive" aria-hidden="true"></i> Sin conectar</span>}
+        {token?<span className="badge badge-success" style={{fontSize:11}}><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Google Drive activo</span>:<span className="badge badge-warning" style={{fontSize:11}}><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Sin conectar</span>}
         <button className="btn btn-ghost btn-sm" onClick={onLogout}><i className="ti ti-logout" aria-hidden="true"></i> Salir</button>
       </div>
     </header>
@@ -343,7 +364,7 @@ function AdminPanel({data,setData,token,setToken,onLogout}){
       {sinContrato>0&&<div className="alert alert-warning" style={{marginBottom:"1rem"}}><i className="ti ti-alert-triangle" aria-hidden="true"></i><span><strong>{sinContrato} encuestador{sinContrato>1?"es":""}</strong> sin contrato firmado.</span></div>}
       {data.length===0&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Carga una planilla Excel para comenzar.</span></div>}
       <div className="tab-bar">
-        {[["resumen","Resumen","ti-layout-dashboard"],["encuestadores","Encuestadores","ti-users"],["cargar","Cargar planilla","ti-upload"],["onedrive","OneDrive","ti-brand-onedrive"]].map(([id,label,icon])=>(
+        {[["resumen","Resumen","ti-layout-dashboard"],["encuestadores","Encuestadores","ti-users"],["cargar","Cargar planilla","ti-upload"],["onedrive","Google Drive","ti-brand-google-drive"]].map(([id,label,icon])=>(
           <button key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}><i className={`ti ${icon}`} aria-hidden="true" style={{marginRight:4}}></i>{label}</button>
         ))}
       </div>
@@ -393,10 +414,10 @@ function AdminPanel({data,setData,token,setToken,onLogout}){
 
       {tab==="onedrive"&&<div className="card"><p className="section-title">Configuración OneDrive</p>
         {!token?<>
-          <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Conecta tu cuenta Microsoft para guardar las boletas en <code>Boletas_Honorarios/{mes}</code>.</span></div>
-          <button className="btn btn-primary" onClick={conectar} disabled={connecting}>{connecting?<><span className="spinner"></span> Conectando...</>:<><i className="ti ti-brand-onedrive" aria-hidden="true"></i> Conectar con OneDrive</>}</button>
+          <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Conecta tu cuenta Microsoft para guardar las boletas en Google Drive / Boletas_Honorarios / {mes}.</span></div>
+          <button className="btn btn-primary" onClick={conectar} disabled={connecting}>{connecting?<><span className="spinner"></span> Conectando...</>:<><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Conectar con Google Drive</>}</button>
         </>:<>
-          <div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>OneDrive conectado</strong><p style={{fontSize:13,marginTop:3}}>Carpeta: <code>OneDrive / {FOLDER_ROOT} / {mes}</code></p></div></div>
+          <div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Google Drive conectado</strong><p style={{fontSize:13,marginTop:3}}>Carpeta: <code>Google Drive / {FOLDER_ROOT} / {mes}</code></p></div></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div className="stat-card"><div className="stat-label">Carpeta activa</div><div style={{fontSize:13,fontWeight:500,marginTop:4}}>{mes}</div></div>
             <div className="stat-card"><div className="stat-label">Boletas guardadas</div><div className="stat-value">{boletasOk}</div></div>
@@ -471,11 +492,11 @@ function EncView({enc,data,setData,token,setToken,onBack}){
     if(!file){setMsg({text:"Selecciona un archivo PDF.",type:"warning"});return;}
     let tok=token;
     if(!tok){setAuth(true);setMsg({text:"Iniciando sesión con Microsoft...",type:"info"});try{tok=await getToken();setToken(tok);}catch(e){setMsg({text:"No se pudo autenticar: "+e.message,type:"danger"});setAuth(false);return;}setAuth(false);}
-    setUpl(true);setMsg({text:"Subiendo boleta a OneDrive...",type:"info"});
+    setUpl(true);setMsg({text:"Subiendo boleta a Google Drive...",type:"info"});
     try{
       const mes=getMesCarpeta(),nombre=enc.nombre.replace(/\s+/g,"_"),fileName=`${enc.rut}_${numBoleta.trim()}_${nombre}.pdf`;
       await uploadPDF(tok,file,fileName,mes);
-      setDone(true);setMsg({text:`Boleta guardada en OneDrive/${FOLDER_ROOT}/${mes}`,type:"success"});
+      setDone(true);setMsg({text:`Boleta guardada en Google Drive/${FOLDER_ROOT}/${mes}`,type:"success"});
       setData(data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:numBoleta.trim()}:r));
     }catch(e){setMsg({text:"Error al subir: "+e.message,type:"danger"});}
     setUpl(false);
@@ -616,7 +637,7 @@ function EncView({enc,data,setData,token,setToken,onBack}){
           </div>
         ):!done?(
           <>
-            {!token&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Al subir tu boleta se abrirá una ventana para iniciar sesión con Microsoft.</span></div>}
+            {!token&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Al subir tu boleta se abrirá una ventana para iniciar sesión con Google.</span></div>}
             <div className="form-group"><label className="form-label">Número de boleta</label><input className="form-input" value={numBoleta} placeholder="Ej: BOL-2026-001" onChange={e=>setNum(e.target.value)} /></div>
             <div style={{border:"2px dashed rgba(0,0,0,0.15)",borderRadius:"var(--radius-lg)",padding:"2rem 1rem",textAlign:"center",cursor:"pointer",background:"#faf9f6",marginBottom:"1rem"}} onClick={()=>fileRef.current.click()}>
               <i className="ti ti-file-type-pdf" style={{fontSize:36,color:"var(--red)",display:"block",marginBottom:6}} aria-hidden="true"></i>
@@ -628,7 +649,7 @@ function EncView({enc,data,setData,token,setToken,onBack}){
             </button>
           </>
         ):(
-          <div className="alert alert-success"><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Boleta enviada correctamente</strong><p style={{fontSize:13,marginTop:3}}>N° {numBoleta} · Guardada en OneDrive/{FOLDER_ROOT}/{getMesCarpeta()}</p></div></div>
+          <div className="alert alert-success"><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Boleta enviada correctamente</strong><p style={{fontSize:13,marginTop:3}}>N° {numBoleta} · Guardada en Google Drive/{FOLDER_ROOT}/{getMesCarpeta()}</p></div></div>
         )}
         {msg.text&&!done&&!vencido&&<div className={`alert alert-${msg.type}`} style={{marginTop:"0.75rem"}}><i className={`ti ${msg.type==="success"?"ti-check":msg.type==="danger"?"ti-x":"ti-info-circle"}`} aria-hidden="true"></i>{msg.text}</div>}
       </div>
