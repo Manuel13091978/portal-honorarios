@@ -100,7 +100,7 @@ const CORREO      = "f2f@enfoque360.cl";
 const BANCOS = ["ABN AMRO","BANEFE","BBVA","BCI","BICE","CHILE","CONOSUR","CONSORCIO","COPEUCH","CORPBANCA","DESARROLLO","DEUTSCHE","ESTADO","FALABELLA","INTERNACIONAL","ITAU","MERCADO PAGO","RIPLEY","SANTANDER","SCOTIABANK","SECURITY","TAPP","TENPO"];
 const TIPOS_CUENTA = ["RUT","CORRIENTE","VISTA","AHORRO","CHEQUERA ELECTRONICA"];
 
-function getRedirectUri(){return "https://manuel13091978.github.io/portal-honorarios/";}
+function getRedirectUri(){return window.location.origin+window.location.pathname.replace(/\/$/,"");}
 function getMesCarpeta(){
   const now=new Date(),year=now.getFullYear(),month=String(now.getMonth()+1).padStart(2,"0");
   const mes=now.toLocaleString("es-CL",{month:"long"});
@@ -256,16 +256,55 @@ async function uploadPDF(token,fileData,fileName,mesCarpeta){
 }
 
 // ── APP ──────────────────────────────────────────────────────────────────────
+// ── STORAGE HELPERS ──────────────────────────────────────────────────────────
+function saveToStorage(key, value){ try{ localStorage.setItem(key, JSON.stringify(value)); }catch(_){} }
+function loadFromStorage(key, def){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):def; }catch(_){ return def; } }
+
 function App(){
   const [view,setView]=useState("home");
   const [adminAuth,setAdmin]=useState(false);
   const [encActivo,setEnc]=useState(null);
-  const [data,setData]=useState([]);
   const [odToken,setToken]=useState(null);
+
+  // Active planilla (visible to encuestadores)
+  const [data,setDataState]=useState(()=>loadFromStorage("planilla_activa",[]));
+  // Planilla history: [{id, fecha, periodo, rows, activa}]
+  const [historial,setHistorialState]=useState(()=>loadFromStorage("planilla_historial",[]));
+
+  const setData = (rows) => {
+    setDataState(rows);
+    saveToStorage("planilla_activa", rows);
+  };
+
+  const setHistorial = (h) => {
+    setHistorialState(h);
+    saveToStorage("planilla_historial", h);
+  };
+
+  const activarPlanilla = (id) => {
+    const h = historial.map(p => ({...p, activa: p.id===id}));
+    const planilla = h.find(p=>p.id===id);
+    setHistorial(h);
+    if(planilla){ setData(planilla.rows); }
+  };
+
+  const agregarHistorial = (rows, periodo) => {
+    const nueva = {
+      id: Date.now(),
+      fecha: new Date().toLocaleDateString("es-CL"),
+      periodo: periodo || getMesCarpeta().replace("_"," "),
+      rows,
+      activa: true
+    };
+    const h = [nueva, ...historial.map(p=>({...p,activa:false}))].slice(0,6);
+    setHistorial(h);
+    setData(rows);
+  };
+
   if(view==="home")return <Home onAdmin={()=>setView("admin")} onEnc={()=>setView("encuestador")} />;
   if(view==="admin"){
     if(!adminAuth)return <AdminLogin onOk={()=>setAdmin(true)} onBack={()=>setView("home")} />;
-    return <AdminPanel data={data} setData={setData} token={odToken} setToken={setToken} onLogout={()=>{setAdmin(false);setView("home");}} />;
+    return <AdminPanel data={data} setData={setData} token={odToken} setToken={setToken} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} />;
   }
   if(view==="encuestador"){
     if(!encActivo)return <EncLogin data={data} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
@@ -310,7 +349,7 @@ function AdminLogin({onOk,onBack}){
   </>);
 }
 
-function AdminPanel({data,setData,token,setToken,onLogout}){
+function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agregarHistorial,onLogout}){
   const [tab,setTab]=useState("resumen");
   const [excelMsg,setXls]=useState("");
   const [connecting,setC]=useState(false);
@@ -328,7 +367,9 @@ function AdminPanel({data,setData,token,setToken,onLogout}){
         const wb=XLSX.read(ev.target.result,{type:"binary"}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws);
         const parsed=parseExcelRows(rows);
         if(parsed.length===0){setXls("No se encontraron encuestadores. Verifica las columnas del archivo.");return;}
-        setData(parsed);setXls(`✓ ${parsed.length} encuestadores cargados correctamente`);
+        const periodo=parsed[0]?.periodo||getMesCarpeta().replace("_"," ");
+        agregarHistorial(parsed, periodo);
+        setXls(`✓ ${parsed.length} encuestadores cargados y activados correctamente`);
       }catch(err){setXls("Error al leer el archivo: "+err.message);}
     };
     reader.readAsBinaryString(file);
@@ -362,7 +403,7 @@ function AdminPanel({data,setData,token,setToken,onLogout}){
         <div className="stat-card"><div className="stat-label">Sin contrato</div><div className="stat-value" style={{color:sinContrato>0?"var(--red)":"var(--green)"}}>{sinContrato}</div></div>
       </div>
       {sinContrato>0&&<div className="alert alert-warning" style={{marginBottom:"1rem"}}><i className="ti ti-alert-triangle" aria-hidden="true"></i><span><strong>{sinContrato} encuestador{sinContrato>1?"es":""}</strong> sin contrato firmado.</span></div>}
-      {data.length===0&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Carga una planilla Excel para comenzar.</span></div>}
+      {data.length===0&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Carga una planilla Excel para comenzar. Los datos se guardarán automáticamente.</span></div>}
       <div className="tab-bar">
         {[["resumen","Resumen","ti-layout-dashboard"],["encuestadores","Encuestadores","ti-users"],["cargar","Cargar planilla","ti-upload"],["onedrive","Google Drive","ti-brand-google-drive"]].map(([id,label,icon])=>(
           <button key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}><i className={`ti ${icon}`} aria-hidden="true" style={{marginRight:4}}></i>{label}</button>
@@ -412,7 +453,32 @@ function AdminPanel({data,setData,token,setToken,onLogout}){
         {excelMsg&&<div className={`alert ${excelMsg.startsWith("✓")?"alert-success":"alert-warning"}`} style={{marginTop:"1rem"}}><i className={`ti ${excelMsg.startsWith("✓")?"ti-check":"ti-alert-triangle"}`} aria-hidden="true"></i>{excelMsg}</div>}
       </div>}
 
-      {tab==="onedrive"&&<div className="card"><p className="section-title">Configuración OneDrive</p>
+      {tab==="historial"&&<div className="card">
+        <p className="section-title">Historial de planillas</p>
+        {historial.length===0?(
+          <div className="alert alert-info"><i className="ti ti-info-circle" aria-hidden="true"></i><span>Aún no has subido ninguna planilla.</span></div>
+        ):(
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Período</th><th>Fecha subida</th><th>Encuestadores</th><th>Estado</th><th>Acción</th></tr></thead>
+              <tbody>
+                {historial.map((p,i)=>(
+                  <tr key={i}>
+                    <td style={{fontWeight:500}}>{p.periodo}</td>
+                    <td>{p.fecha}</td>
+                    <td style={{textAlign:"center"}}>{p.rows.length}</td>
+                    <td>{p.activa?<span className="badge badge-success"><i className="ti ti-check" aria-hidden="true"></i> Activa</span>:<span className="badge badge-warning">Inactiva</span>}</td>
+                    <td>{!p.activa&&<button className="btn btn-sm btn-primary" onClick={()=>activarPlanilla(p.id)}><i className="ti ti-player-play" aria-hidden="true"></i> Activar</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <hr style={{margin:"1rem 0",border:"none",borderTop:"1px solid var(--gray-border)"}} />
+        <p className="muted" style={{fontSize:12}}>Se guardan las últimas 6 planillas. Al activar una planilla, los encuestadores verán inmediatamente esos datos.</p>
+      </div>}
+            {tab==="onedrive"&&<div className="card"><p className="section-title">Configuración Google Drive</p>
         {!token?<>
           <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Conecta tu cuenta Microsoft para guardar las boletas en Google Drive / Boletas_Honorarios / {mes}.</span></div>
           <button className="btn btn-primary" onClick={conectar} disabled={connecting}>{connecting?<><span className="spinner"></span> Conectando...</>:<><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Conectar con Google Drive</>}</button>
