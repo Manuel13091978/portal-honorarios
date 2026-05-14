@@ -100,7 +100,7 @@ const CORREO      = "f2f@enfoque360.cl";
 const BANCOS = ["ABN AMRO","BANEFE","BBVA","BCI","BICE","CHILE","CONOSUR","CONSORCIO","COPEUCH","CORPBANCA","DESARROLLO","DEUTSCHE","ESTADO","FALABELLA","INTERNACIONAL","ITAU","MERCADO PAGO","RIPLEY","SANTANDER","SCOTIABANK","SECURITY","TAPP","TENPO"];
 const TIPOS_CUENTA = ["RUT","CORRIENTE","VISTA","AHORRO","CHEQUERA ELECTRONICA"];
 
-function getRedirectUri(){return window.location.origin+window.location.pathname.replace(/\/$/,"");}
+function getRedirectUri(){return "https://manuel13091978.github.io/portal-honorarios/";}
 function getMesCarpeta(){
   const now=new Date(),year=now.getFullYear(),month=String(now.getMonth()+1).padStart(2,"0");
   const mes=now.toLocaleString("es-CL",{month:"long"});
