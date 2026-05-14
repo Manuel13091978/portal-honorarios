@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal Honorarios | Asesorías Y Gestión Enfoque Spa</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+  :root{--blue:#185FA5;--blue-light:#E6F1FB;--blue-dark:#0C447C;--green:#3B6D11;--green-light:#EAF3DE;--amber:#854F0B;--amber-light:#FAEEDA;--red:#A32D2D;--red-light:#FCEBEB;--gray-bg:#F7F6F2;--gray-card:#ffffff;--gray-border:rgba(0,0,0,0.1);--gray-text:#1a1918;--gray-muted:#6b6a67;--radius:10px;--radius-lg:14px;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',system-ui,sans-serif;background:var(--gray-bg);color:var(--gray-text);min-height:100vh;font-size:15px;line-height:1.6;}
+  input,select,textarea,button{font-family:inherit;}
+  .site-header{background:var(--blue-dark);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;}
+  .logo{display:flex;align-items:center;gap:10px;color:white;font-weight:600;font-size:15px;}
+  .logo-icon{width:32px;height:32px;background:rgba(255,255,255,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:var(--radius);border:1px solid rgba(0,0,0,0.12);background:white;font-size:14px;font-weight:500;color:var(--gray-text);cursor:pointer;transition:all 0.15s;}
+  .btn:hover{background:#f0ede8;}
+  .btn:disabled{opacity:0.5;cursor:not-allowed;}
+  .btn-primary{background:var(--blue);color:white;border-color:var(--blue);}
+  .btn-primary:hover{background:var(--blue-dark);}
+  .btn-success{background:#3B6D11;color:white;border-color:#3B6D11;}
+  .btn-success:hover{background:#27500A;}
+  .btn-sm{padding:6px 12px;font-size:13px;}
+  .btn-ghost{background:transparent;border-color:rgba(255,255,255,0.3);color:white;}
+  .btn-ghost:hover{background:rgba(255,255,255,0.1);}
+  .card{background:var(--gray-card);border:1px solid var(--gray-border);border-radius:var(--radius-lg);padding:1.4rem;}
+  .card+.card{margin-top:1rem;}
+  .form-group{display:flex;flex-direction:column;gap:5px;margin-bottom:1rem;}
+  .form-label{font-size:13px;color:var(--gray-muted);font-weight:500;}
+  .form-input{padding:10px 13px;border-radius:var(--radius);border:1px solid rgba(0,0,0,0.15);background:white;font-size:14px;color:var(--gray-text);outline:none;transition:border-color 0.15s,box-shadow 0.15s;}
+  .form-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(24,95,165,0.12);}
+  .form-input:disabled{background:#f5f4f0;color:var(--gray-muted);}
+  .form-error{font-size:12px;color:var(--red);}
+  select.form-input{cursor:pointer;}
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:3px 10px;border-radius:999px;}
+  .badge-success{background:var(--green-light);color:var(--green);}
+  .badge-warning{background:var(--amber-light);color:var(--amber);}
+  .badge-danger{background:var(--red-light);color:var(--red);}
+  .badge-info{background:var(--blue-light);color:var(--blue);}
+  .alert{padding:13px 16px;border-radius:var(--radius);font-size:14px;display:flex;align-items:flex-start;gap:10px;line-height:1.5;}
+  .alert i{font-size:18px;flex-shrink:0;margin-top:1px;}
+  .alert-warning{background:var(--amber-light);color:var(--amber);border:1px solid #EF9F27;}
+  .alert-success{background:var(--green-light);color:var(--green);border:1px solid #97C459;}
+  .alert-info{background:var(--blue-light);color:var(--blue);border:1px solid #85B7EB;}
+  .alert-danger{background:var(--red-light);color:var(--red);border:1px solid #F09595;}
+  .tab-bar{display:flex;gap:2px;border-bottom:1px solid var(--gray-border);margin-bottom:1.5rem;overflow-x:auto;}
+  .tab{padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--gray-muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;transition:color 0.15s;}
+  .tab:hover{color:var(--gray-text);}
+  .tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .table-wrap{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;padding:9px 12px;font-weight:500;font-size:12px;color:var(--gray-muted);border-bottom:1px solid var(--gray-border);background:#faf9f6;white-space:nowrap;}
+  td{padding:11px 12px;border-bottom:1px solid rgba(0,0,0,0.06);color:var(--gray-text);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr:hover td{background:#faf9f6;}
+  .upload-zone{border:2px dashed rgba(0,0,0,0.15);border-radius:var(--radius-lg);padding:2rem 1rem;text-align:center;cursor:pointer;transition:all 0.15s;background:#faf9f6;}
+  .upload-zone:hover{border-color:var(--blue);background:var(--blue-light);}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:1.5rem;}
+  .stat-card{background:#faf9f6;border:1px solid var(--gray-border);border-radius:var(--radius);padding:1rem;}
+  .stat-label{font-size:12px;color:var(--gray-muted);margin-bottom:4px;}
+  .stat-value{font-size:22px;font-weight:600;color:var(--gray-text);}
+  .spinner{display:inline-block;width:15px;height:15px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .page{max-width:960px;margin:0 auto;padding:2rem 1rem;}
+  .page-narrow{max-width:460px;margin:0 auto;padding:2rem 1rem;}
+  .muted{color:var(--gray-muted);font-size:13px;}
+  .section-title{font-size:15px;font-weight:600;margin-bottom:1rem;color:var(--gray-text);}
+  code{font-family:'DM Mono',monospace;font-size:12px;background:#f0ede8;padding:2px 6px;border-radius:4px;}
+  .avatar{width:44px;height:44px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;color:var(--blue);flex-shrink:0;}
+  .home-icon{width:64px;height:64px;border-radius:18px;background:var(--blue);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+  .info-banner{background:var(--blue-dark);color:white;padding:16px 20px;border-radius:var(--radius-lg);margin-bottom:1rem;}
+  .info-banner .periodo{font-size:12px;opacity:0.7;margin-bottom:2px;}
+  .info-banner .empresa-name{font-size:17px;font-weight:600;}
+  .contact-box{background:#faf9f6;border:1px solid var(--gray-border);border-radius:var(--radius);padding:12px 16px;display:flex;flex-direction:column;gap:8px;}
+  .contact-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-muted);}
+  .contact-row strong{color:var(--gray-text);}
+  .deadline-banner{background:#7f1d1d;color:white;padding:14px 18px;border-radius:var(--radius-lg);margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px;font-size:14px;}
+  .deadline-banner.proxima{background:#92400e;}
+  @media(max-width:600px){.page{padding:1rem;}.stat-grid{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef } = React;
+
+const CLIENT_ID   = "3c0c532f-0aa8-42ac-a012-5f9e48f55cf8";
+const TENANT_ID   = "common";
+const ADMIN_PASS  = "admin2024";
+const FOLDER_ROOT = "Boletas_Honorarios";
+const JEFE        = "Manuel Carrasco";
+const TELEFONO    = "991846932";
+const CORREO      = "f2f@enfoque360.cl";
+
+const BANCOS = ["ABN AMRO","BANEFE","BBVA","BCI","BICE","CHILE","CONOSUR","CONSORCIO","COPEUCH","CORPBANCA","DESARROLLO","DEUTSCHE","ESTADO","FALABELLA","INTERNACIONAL","ITAU","MERCADO PAGO","RIPLEY","SANTANDER","SCOTIABANK","SECURITY","TAPP","TENPO"];
+const TIPOS_CUENTA = ["RUT","CORRIENTE","VISTA","AHORRO","CHEQUERA ELECTRONICA"];
+
+function getRedirectUri(){return window.location.origin+window.location.pathname.replace(/\/$/,"");}
+function getMesCarpeta(){
+  const now=new Date(),year=now.getFullYear(),month=String(now.getMonth()+1).padStart(2,"0");
+  const mes=now.toLocaleString("es-CL",{month:"long"});
+  return `${year}-${month}_${mes.charAt(0).toUpperCase()+mes.slice(1)}`;
+}
+
+function rutSinDigito(rut){
+  return String(rut).replace(/\./g,"").split("-")[0].replace(/[^0-9]/g,"").trim();
+}
+
+function col(row,...keys){
+  for(const k of keys){
+    if(row[k]!==undefined&&row[k]!==null&&row[k]!=="")return row[k];
+    const found=Object.keys(row).find(rk=>rk.trim().toLowerCase()===k.toLowerCase());
+    if(found&&row[found]!==undefined&&row[found]!==null&&row[found]!=="")return row[found];
+  }
+  return "";
+}
+
+function parseFechaTope(str){
+  if(!str)return null;
+  try{
+    const clean=String(str).trim().replace(/-/g,"/");
+    const parts=clean.split(" ");
+    const dp=parts[0].split("/");
+    const tp=parts[1]?parts[1].split(":"):[23,59];
+    return new Date(dp[2],dp[1]-1,dp[0],tp[0],tp[1]);
+  }catch{return null;}
+}
+
+function formatFechaTope(str){
+  const d=parseFechaTope(str);
+  if(!d)return str;
+  const dias=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  const meses=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const hh=String(d.getHours()).padStart(2,"0");
+  const mm=String(d.getMinutes()).padStart(2,"0");
+  return `${dias[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]} ${d.getFullYear()} a las ${hh}:${mm} hrs`;
+}
+
+function isVencido(str){
+  const d=parseFechaTope(str);
+  return d?new Date()>d:false;
+}
+
+function isProxima(str){
+  const d=parseFechaTope(str);
+  if(!d)return false;
+  const diff=(d-new Date())/(1000*60*60);
+  return diff>0&&diff<=24;
+}
+
+function parseExcelRows(rows){
+  return rows.map(r=>{
+    const rut       =String(col(r,"Rut","RUT","rut")||"");
+    const nombre    =String(col(r,"NOMBRE ENCUESTADOR","NOMBRE","Nombre","nombre")||"");
+    const proyecto  =String(col(r,"PROYECTO","Proyecto","proyecto")||"");
+    const periodo   =String(col(r,"PERIODO PAGO","PERIODO","Período de Pago","periodo")||"");
+    const montoUnit =Number(String(col(r,"MONTO UNITARIO","Monto Unitario","monto_unitario")||"0").replace(/[^0-9.-]/g,""))||0;
+    const monto     =Number(String(col(r,"MONTO BOLETA","MONTO","Monto","monto","Valor total bruto")||"0").replace(/[^0-9.-]/g,""))||montoUnit||0;
+    const encuestas =Number(col(r,"CANTIDAD ENCUESTAS","Cantidad","CANTIDAD","encuestas")||0);
+    const empresa   =String(col(r,"Empresa","EMPRESA","empresa")||"");
+    const empresaRUT=String(col(r,"RUT EMPRESA","Rut Empresa","rut_empresa")||"");
+    const empresaDir=String(col(r,"Dirección Empresa","direccion_empresa","DIRECCION")||"");
+    const contrato  =String(col(r,"Contrato Firmado","contrato_firmado","CONTRATO")||"NO").toUpperCase()==="SI";
+    const tipoCuenta=String(col(r,"Tipo Cuenta","TIPO CUENTA","tipo_cuenta")||"").toUpperCase();
+    const cuentaRUT =tipoCuenta==="RUT";
+    const numCuenta =cuentaRUT?rutSinDigito(rut):String(col(r,"Cuenta","CUENTA","numero_cuenta")||"");
+    const banco     =cuentaRUT?"ESTADO":String(col(r,"Banco","BANCO","banco")||"");
+    const fechaTope =String(col(r,"Fecha Tope","FECHA TOPE","fecha_tope","FechaTope")||"");
+    return{rut,nombre,proyecto,periodo,monto,encuestas,empresa,empresaRUT,empresaDir,contrato,cuentaRUT,tipoCuenta,numCuenta,banco,fechaTope,boleta:false,numBoleta:"",boletaUrl:""};
+  }).filter(r=>r.rut&&r.nombre);
+}
+
+function descargarExcel(data){
+  const rows=data.map(r=>({
+    "PROYECTO":r.proyecto,
+    "PERIODO PAGO":r.periodo,
+    "NOMBRE ENCUESTADOR":r.nombre,
+    "Rut":r.rut,
+    "CANTIDAD ENCUESTAS":r.encuestas,
+    "MONTO BOLETA":r.monto,
+    "Empresa":r.empresa,
+    "RUT EMPRESA":r.empresaRUT,
+    "Dirección Empresa":r.empresaDir,
+    "Tipo Cuenta":r.tipoCuenta,
+    "Banco":r.banco,
+    "Cuenta":r.numCuenta,
+    "Contrato Firmado":r.contrato?"SI":"NO",
+    "Fecha Tope":r.fechaTope,
+    "N° BOLETA":r.numBoleta,
+    "BOLETA SUBIDA":r.boleta?"SI":"NO",
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Honorarios");
+  XLSX.writeFile(wb,`Honorarios_${getMesCarpeta()}.xlsx`);
+}
+
+async function getToken(){
+  return new Promise((resolve,reject)=>{
+    const url="https://accounts.google.com/o/oauth2/v2/auth"
+      +"?client_id="+GOOGLE_CLIENT_ID
+      +"&response_type=token"
+      +"&redirect_uri="+encodeURIComponent(getRedirectUri())
+      +"&scope="+encodeURIComponent("https://www.googleapis.com/auth/drive.file")
+      +"&prompt=consent";
+    const popup=window.open(url,"gauth","width=520,height=660,left=200,top=80");
+    if(!popup){reject(new Error("El navegador bloqueó la ventana emergente."));return;}
+    const timer=setInterval(()=>{
+      try{
+        if(!popup||popup.closed){clearInterval(timer);reject(new Error("Ventana cerrada."));return;}
+        const hash=popup.location.hash;
+        if(hash.includes("access_token")){clearInterval(timer);popup.close();resolve(new URLSearchParams(hash.slice(1)).get("access_token"));}
+        if(hash.includes("error=")){clearInterval(timer);popup.close();reject(new Error("Error de autenticación"));}
+      }catch(_){}
+    },600);
+    setTimeout(()=>{clearInterval(timer);try{popup.close();}catch(_){}reject(new Error("Tiempo agotado."));},180000);
+  });
+}
+
+async function getOrCreateFolder(token, name, parentId=null){
+  const h={Authorization:`Bearer ${token}`,"Content-Type":"application/json"};
+  const q=parentId
+    ?`name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
+    :`name='${name}' and mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`;
+  const search=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,{headers:h});
+  const data=await search.json();
+  if(data.files&&data.files.length>0) return data.files[0].id;
+  const meta={name,mimeType:"application/vnd.google-apps.folder"};
+  if(parentId) meta.parents=[parentId];
+  const create=await fetch("https://www.googleapis.com/drive/v3/files",{method:"POST",headers:h,body:JSON.stringify(meta)});
+  const folder=await create.json();
+  return folder.id;
+}
+
+async function ensureFolders(token,mesCarpeta){
+  const rootId=await getOrCreateFolder(token,FOLDER_ROOT);
+  const mesId=await getOrCreateFolder(token,mesCarpeta,rootId);
+  return mesId;
+}
+
+async function uploadPDF(token,fileData,fileName,mesCarpeta){
+  const mesId=await ensureFolders(token,mesCarpeta);
+  const h={Authorization:`Bearer ${token}`};
+  const meta=JSON.stringify({name:fileName,parents:[mesId]});
+  const form=new FormData();
+  form.append("metadata",new Blob([meta],{type:"application/json"}));
+  form.append("file",new Blob([fileData],{type:"application/pdf"}));
+  const res=await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",{method:"POST",headers:h,body:form});
+  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Error ${res.status}`);}
+  return await res.json();
+}
+
+// ── APP ──────────────────────────────────────────────────────────────────────
+function App(){
+  const [view,setView]=useState("home");
+  const [adminAuth,setAdmin]=useState(false);
+  const [encActivo,setEnc]=useState(null);
+  const [data,setData]=useState([]);
+  const [odToken,setToken]=useState(null);
+  if(view==="home")return <Home onAdmin={()=>setView("admin")} onEnc={()=>setView("encuestador")} />;
+  if(view==="admin"){
+    if(!adminAuth)return <AdminLogin onOk={()=>setAdmin(true)} onBack={()=>setView("home")} />;
+    return <AdminPanel data={data} setData={setData} token={odToken} setToken={setToken} onLogout={()=>{setAdmin(false);setView("home");}} />;
+  }
+  if(view==="encuestador"){
+    if(!encActivo)return <EncLogin data={data} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
+    return <EncView enc={data.find(r=>r.rut===encActivo.rut)} data={data} setData={setData} token={odToken} setToken={setToken} onBack={()=>setEnc(null)} />;
+  }
+}
+
+function Home({onAdmin,onEnc}){
+  return(<>
+    <header className="site-header"><div className="logo"><div className="logo-icon"><i className="ti ti-report-money" style={{fontSize:18,color:"white"}} aria-hidden="true"></i></div>Portal Honorarios</div></header>
+    <div className="page-narrow" style={{marginTop:40}}>
+      <div style={{textAlign:"center",marginBottom:"2.5rem"}}>
+        <div className="home-icon"><i className="ti ti-file-invoice" style={{fontSize:32,color:"white"}} aria-hidden="true"></i></div>
+        <h1 style={{fontSize:24,fontWeight:600,marginBottom:6}}>Portal de Honorarios</h1>
+        <p className="muted">Asesorías Y Gestión Enfoque Spa</p>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
+        <button className="btn btn-primary" style={{justifyContent:"center",padding:"13px 16px",fontSize:15}} onClick={onEnc}><i className="ti ti-user" aria-hidden="true"></i> Soy encuestador</button>
+        <button className="btn" style={{justifyContent:"center",padding:"13px 16px",fontSize:15}} onClick={onAdmin}><i className="ti ti-shield-lock" aria-hidden="true"></i> Soy administrador</button>
+      </div>
+      <p className="muted" style={{textAlign:"center",marginTop:"2rem",fontSize:12}}>Asesorías Y Gestión Enfoque Spa · Sistema interno de honorarios</p>
+    </div>
+  </>);
+}
+
+function AdminLogin({onOk,onBack}){
+  const [pwd,setPwd]=useState("");const [err,setErr]=useState(false);
+  const check=()=>pwd===ADMIN_PASS?onOk():setErr(true);
+  return(<>
+    <header className="site-header"><div className="logo"><div className="logo-icon"><i className="ti ti-report-money" style={{fontSize:18,color:"white"}} aria-hidden="true"></i></div>Portal Honorarios</div><button className="btn btn-ghost btn-sm" onClick={onBack}><i className="ti ti-arrow-left" aria-hidden="true"></i> Volver</button></header>
+    <div className="page-narrow" style={{marginTop:40}}>
+      <div className="card">
+        <div style={{textAlign:"center",marginBottom:"1.5rem"}}>
+          <div style={{width:48,height:48,borderRadius:"50%",background:"var(--blue-light)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><i className="ti ti-shield-lock" style={{fontSize:22,color:"var(--blue)"}} aria-hidden="true"></i></div>
+          <h2 style={{fontSize:18,fontWeight:600}}>Panel Administrador</h2>
+          <p className="muted" style={{marginTop:4}}>Ingresa tu contraseña para continuar</p>
+        </div>
+        <div className="form-group"><label className="form-label">Contraseña</label><input className="form-input" type="password" value={pwd} placeholder="••••••••" onChange={e=>{setPwd(e.target.value);setErr(false);}} onKeyDown={e=>e.key==="Enter"&&check()} />{err&&<span className="form-error">Contraseña incorrecta</span>}</div>
+        <button className="btn btn-primary" style={{width:"100%"}} onClick={check}><i className="ti ti-login" aria-hidden="true"></i> Ingresar</button>
+      </div>
+    </div>
+  </>);
+}
+
+function AdminPanel({data,setData,token,setToken,onLogout}){
+  const [tab,setTab]=useState("resumen");
+  const [excelMsg,setXls]=useState("");
+  const [connecting,setC]=useState(false);
+  const fileRef=useRef();
+  const mes=getMesCarpeta();
+  const totalMonto=data.reduce((s,r)=>s+r.monto,0);
+  const sinContrato=data.filter(r=>!r.contrato).length;
+  const boletasOk=data.filter(r=>r.boleta).length;
+
+  const handleExcel=e=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const wb=XLSX.read(ev.target.result,{type:"binary"}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws);
+        const parsed=parseExcelRows(rows);
+        if(parsed.length===0){setXls("No se encontraron encuestadores. Verifica las columnas del archivo.");return;}
+        setData(parsed);setXls(`✓ ${parsed.length} encuestadores cargados correctamente`);
+      }catch(err){setXls("Error al leer el archivo: "+err.message);}
+    };
+    reader.readAsBinaryString(file);
+    e.target.value="";
+  };
+
+  const conectar=async()=>{
+    setC(true);
+    try{const t=await getToken();setToken(t);await ensureFolders(t,mes);}
+    catch(e){alert("Error: "+e.message);}
+    setC(false);
+  };
+
+  return(<>
+    <header className="site-header">
+      <div className="logo"><div className="logo-icon"><i className="ti ti-report-money" style={{fontSize:18,color:"white"}} aria-hidden="true"></i></div>Portal Honorarios</div>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        {token?<span className="badge badge-success" style={{fontSize:11}}><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Google Drive activo</span>:<span className="badge badge-warning" style={{fontSize:11}}><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Sin conectar</span>}
+        <button className="btn btn-ghost btn-sm" onClick={onLogout}><i className="ti ti-logout" aria-hidden="true"></i> Salir</button>
+      </div>
+    </header>
+    <div className="page">
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.5rem",flexWrap:"wrap",gap:12}}>
+        <div><h1 style={{fontSize:20,fontWeight:600}}>Panel de administración</h1><p className="muted">{mes.replace("_"," ")}</p></div>
+        {data.length>0&&<button className="btn btn-success btn-sm" onClick={()=>descargarExcel(data)}><i className="ti ti-download" aria-hidden="true"></i> Descargar Excel</button>}
+      </div>
+      <div className="stat-grid">
+        <div className="stat-card"><div className="stat-label">Encuestadores</div><div className="stat-value">{data.length}</div></div>
+        <div className="stat-card"><div className="stat-label">Monto total</div><div className="stat-value" style={{fontSize:18}}>${totalMonto.toLocaleString("es-CL")}</div></div>
+        <div className="stat-card"><div className="stat-label">Boletas recibidas</div><div className="stat-value">{boletasOk} / {data.length}</div></div>
+        <div className="stat-card"><div className="stat-label">Sin contrato</div><div className="stat-value" style={{color:sinContrato>0?"var(--red)":"var(--green)"}}>{sinContrato}</div></div>
+      </div>
+      {sinContrato>0&&<div className="alert alert-warning" style={{marginBottom:"1rem"}}><i className="ti ti-alert-triangle" aria-hidden="true"></i><span><strong>{sinContrato} encuestador{sinContrato>1?"es":""}</strong> sin contrato firmado.</span></div>}
+      {data.length===0&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Carga una planilla Excel para comenzar.</span></div>}
+      <div className="tab-bar">
+        {[["resumen","Resumen","ti-layout-dashboard"],["encuestadores","Encuestadores","ti-users"],["cargar","Cargar planilla","ti-upload"],["onedrive","Google Drive","ti-brand-google-drive"]].map(([id,label,icon])=>(
+          <button key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}><i className={`ti ${icon}`} aria-hidden="true" style={{marginRight:4}}></i>{label}</button>
+        ))}
+      </div>
+
+      {tab==="resumen"&&<div className="card"><p className="section-title">Estado de boletas</p><div className="table-wrap"><table><thead><tr><th>Nombre</th><th>RUT</th><th>Proyecto</th><th>Período</th><th>Monto</th><th>Contrato</th><th>Cuenta</th><th>Boleta</th></tr></thead><tbody>
+        {data.map((r,i)=><tr key={i}>
+          <td style={{fontWeight:500}}>{r.nombre}</td>
+          <td><code>{r.rut}</code></td>
+          <td>{r.proyecto}</td>
+          <td>{r.periodo}</td>
+          <td>${r.monto.toLocaleString("es-CL")}</td>
+          <td>{r.contrato?<span className="badge badge-success"><i className="ti ti-check" aria-hidden="true"></i> Al día</span>:<span className="badge badge-danger"><i className="ti ti-x" aria-hidden="true"></i> Pendiente</span>}</td>
+          <td>{r.tipoCuenta==="RUT"?<span className="badge badge-info">Cuenta RUT</span>:r.banco?<span className="badge badge-success">{r.banco}</span>:<span className="badge badge-warning">Sin datos</span>}</td>
+          <td>{r.boleta?<span className="badge badge-success">{r.numBoleta}</span>:<span className="badge badge-warning">Sin subir</span>}</td>
+        </tr>)}
+      </tbody></table></div></div>}
+
+      {tab==="encuestadores"&&<div className="card"><p className="section-title">Detalle encuestadores</p><div className="table-wrap"><table><thead><tr><th>Nombre</th><th>RUT</th><th>Proyecto</th><th>Encuestas</th><th>Monto</th><th>Banco</th><th>Tipo Cuenta</th><th>N° Cuenta</th></tr></thead><tbody>
+        {data.map((r,i)=><tr key={i}>
+          <td style={{fontWeight:500}}>{r.nombre}</td>
+          <td><code>{r.rut}</code></td>
+          <td>{r.proyecto}</td>
+          <td style={{textAlign:"center"}}>{r.encuestas}</td>
+          <td>${r.monto.toLocaleString("es-CL")}</td>
+          <td>{r.banco||"-"}</td>
+          <td>{r.tipoCuenta||"-"}</td>
+          <td><code>{r.numCuenta||"-"}</code></td>
+        </tr>)}
+      </tbody></table></div></div>}
+
+      {tab==="cargar"&&<div className="card">
+        <p className="section-title">Cargar planilla Excel</p>
+        <p className="muted" style={{marginBottom:"0.75rem"}}>Columnas que lee la app automáticamente:</p>
+        <div style={{background:"#faf9f6",border:"1px solid var(--gray-border)",borderRadius:"var(--radius)",padding:"12px 16px",marginBottom:"1rem",fontSize:13,lineHeight:2}}>
+          <code>NOMBRE</code> · <code>Rut</code> · <code>PROYECTO</code> · <code>MONTO</code> · <code>Cantidad</code> · <code>Empresa</code><br/>
+          <code>RUT EMPRESA</code> · <code>Contrato Firmado</code> (SI/NO) · <code>Fecha Tope</code> (dd/mm/aaaa HH:mm)<br/>
+          <code>Tipo Cuenta</code> (RUT/CORRIENTE/VISTA/AHORRO/CHEQUERA ELECTRONICA) · <code>Banco</code> · <code>Cuenta</code>
+        </div>
+        <div className="upload-zone" onClick={()=>fileRef.current.click()}>
+          <i className="ti ti-file-spreadsheet" style={{fontSize:40,color:"var(--blue)",display:"block",marginBottom:8}} aria-hidden="true"></i>
+          <p style={{fontWeight:500,marginBottom:4}}>Haz clic para subir el Excel</p>
+          <p className="muted">Formatos: .xlsx · .xls</p>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={handleExcel} />
+        </div>
+        {excelMsg&&<div className={`alert ${excelMsg.startsWith("✓")?"alert-success":"alert-warning"}`} style={{marginTop:"1rem"}}><i className={`ti ${excelMsg.startsWith("✓")?"ti-check":"ti-alert-triangle"}`} aria-hidden="true"></i>{excelMsg}</div>}
+      </div>}
+
+      {tab==="onedrive"&&<div className="card"><p className="section-title">Configuración OneDrive</p>
+        {!token?<>
+          <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Conecta tu cuenta Microsoft para guardar las boletas en Google Drive / Boletas_Honorarios / {mes}.</span></div>
+          <button className="btn btn-primary" onClick={conectar} disabled={connecting}>{connecting?<><span className="spinner"></span> Conectando...</>:<><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Conectar con Google Drive</>}</button>
+        </>:<>
+          <div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Google Drive conectado</strong><p style={{fontSize:13,marginTop:3}}>Carpeta: <code>Google Drive / {FOLDER_ROOT} / {mes}</code></p></div></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div className="stat-card"><div className="stat-label">Carpeta activa</div><div style={{fontSize:13,fontWeight:500,marginTop:4}}>{mes}</div></div>
+            <div className="stat-card"><div className="stat-label">Boletas guardadas</div><div className="stat-value">{boletasOk}</div></div>
+          </div>
+        </>}
+      </div>}
+    </div>
+  </>);
+}
+
+function EncLogin({data,onOk,onBack}){
+  const [rut,setRut]=useState("");const [err,setErr]=useState("");
+  const buscar=()=>{
+    if(data.length===0){setErr("El administrador aún no ha cargado la planilla de pagos.");return;}
+    const c=rut.trim().toLowerCase().replace(/[\s.]/g,"").replace(/-/g,"");
+    const e=data.find(r=>{const rc=r.rut.toLowerCase().replace(/[\s.]/g,"").replace(/-/g,"");return rc===c;});
+    if(e)onOk(e);else setErr("RUT no encontrado. Verifica el formato (ej: 14541963-8)");
+  };
+  return(<>
+    <header className="site-header"><div className="logo"><div className="logo-icon"><i className="ti ti-report-money" style={{fontSize:18,color:"white"}} aria-hidden="true"></i></div>Portal Honorarios</div><button className="btn btn-ghost btn-sm" onClick={onBack}><i className="ti ti-arrow-left" aria-hidden="true"></i> Volver</button></header>
+    <div className="page-narrow" style={{marginTop:40}}>
+      <div className="card">
+        <div style={{textAlign:"center",marginBottom:"1.5rem"}}>
+          <div style={{width:48,height:48,borderRadius:"50%",background:"var(--blue-light)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><i className="ti ti-user" style={{fontSize:22,color:"var(--blue)"}} aria-hidden="true"></i></div>
+          <h2 style={{fontSize:18,fontWeight:600}}>Portal Encuestador</h2>
+          <p className="muted" style={{marginTop:4}}>Ingresa tu RUT para ver tu información de pago</p>
+        </div>
+        <div className="form-group"><label className="form-label">RUT</label><input className="form-input" value={rut} placeholder="12345678-9" onChange={e=>{setRut(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&buscar()} />{err&&<span className="form-error">{err}</span>}</div>
+        <button className="btn btn-primary" style={{width:"100%"}} onClick={buscar}><i className="ti ti-login" aria-hidden="true"></i> Ver mi información</button>
+      </div>
+    </div>
+  </>);
+}
+
+function EncView({enc,data,setData,token,setToken,onBack}){
+  const [numBoleta,setNum]     = useState(enc.numBoleta||"");
+  const [file,setFile]         = useState(null);
+  const [uploading,setUpl]     = useState(false);
+  const [authLoad,setAuth]     = useState(false);
+  const [done,setDone]         = useState(enc.boleta||false);
+  const [msg,setMsg]           = useState({text:"",type:""});
+  const [tipoCta,setTipoCta]   = useState(enc.tipoCuenta||"");
+  const [banco,setBanco]       = useState(enc.banco||"");
+  const [numCta,setNumCta]     = useState(enc.numCuenta||"");
+  const [ctaSaved,setCtaSaved] = useState(!!(enc.tipoCuenta&&enc.banco&&enc.numCuenta));
+  const fileRef = useRef();
+
+  const vencido  = isVencido(enc.fechaTope);
+  const proxima  = isProxima(enc.fechaTope);
+  const esRUT    = tipoCta==="RUT";
+
+  const handleTipo = val => {
+    setTipoCta(val);
+    if(val==="RUT"){ setBanco("ESTADO"); setNumCta(rutSinDigito(enc.rut)); }
+    else{ setBanco(""); setNumCta(""); }
+  };
+
+  const handleFile=e=>{const f=e.target.files[0];if(f&&f.type==="application/pdf"){setFile(f);setMsg({text:"",type:""});}else setMsg({text:"Solo se admiten archivos PDF.",type:"warning"});};
+
+  const guardarCuenta=()=>{
+    if(!tipoCta){setMsg({text:"Selecciona el tipo de cuenta.",type:"warning"});return;}
+    if(!esRUT&&!banco){setMsg({text:"Selecciona el banco.",type:"warning"});return;}
+    if(!numCta.trim()){setMsg({text:"Ingresa el número de cuenta.",type:"warning"});return;}
+    setCtaSaved(true);
+    setMsg({text:"",type:""});
+    setData(data.map(r=>r.rut===enc.rut?{...r,tipoCuenta:tipoCta,banco,numCuenta:numCta}:r));
+  };
+
+  const handleSubir=async()=>{
+    if(!ctaSaved){setMsg({text:"Guarda tus datos bancarios primero.",type:"warning"});return;}
+    if(!numBoleta.trim()){setMsg({text:"Ingresa el número de boleta.",type:"warning"});return;}
+    if(!file){setMsg({text:"Selecciona un archivo PDF.",type:"warning"});return;}
+    let tok=token;
+    if(!tok){setAuth(true);setMsg({text:"Iniciando sesión con Microsoft...",type:"info"});try{tok=await getToken();setToken(tok);}catch(e){setMsg({text:"No se pudo autenticar: "+e.message,type:"danger"});setAuth(false);return;}setAuth(false);}
+    setUpl(true);setMsg({text:"Subiendo boleta a Google Drive...",type:"info"});
+    try{
+      const mes=getMesCarpeta(),nombre=enc.nombre.replace(/\s+/g,"_"),fileName=`${enc.rut}_${numBoleta.trim()}_${nombre}.pdf`;
+      await uploadPDF(tok,file,fileName,mes);
+      setDone(true);setMsg({text:`Boleta guardada en Google Drive/${FOLDER_ROOT}/${mes}`,type:"success"});
+      setData(data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:numBoleta.trim()}:r));
+    }catch(e){setMsg({text:"Error al subir: "+e.message,type:"danger"});}
+    setUpl(false);
+  };
+
+  const initials=enc.nombre.split(" ").map(n=>n[0]).slice(0,2).join("");
+
+  return(<>
+    <header className="site-header">
+      <div className="logo"><div className="logo-icon"><i className="ti ti-report-money" style={{fontSize:18,color:"white"}} aria-hidden="true"></i></div>Portal Honorarios</div>
+      <button className="btn btn-ghost btn-sm" onClick={onBack}><i className="ti ti-arrow-left" aria-hidden="true"></i> Volver</button>
+    </header>
+    <div className="page" style={{maxWidth:640}}>
+
+      {/* Banner empresa */}
+      <div className="info-banner">
+        <div className="periodo">Período de pago</div>
+        <div className="empresa-name">Asesorías Y Gestión Enfoque Spa · {enc.periodo||getMesCarpeta().replace("_"," ")}</div>
+      </div>
+
+      {/* Alerta fecha tope */}
+      {enc.fechaTope&&vencido&&(
+        <div className="deadline-banner">
+          <i className="ti ti-lock" style={{fontSize:20,flexShrink:0}} aria-hidden="true"></i>
+          <div>
+            <strong>Plazo de recepción vencido</strong>
+            <p style={{fontSize:13,marginTop:3}}>El plazo para enviar boletas venció el {formatFechaTope(enc.fechaTope)}. Debes contactarte con tu coordinador.</p>
+            <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13}}><i className="ti ti-user" style={{fontSize:14}} aria-hidden="true"></i><span>{JEFE} · <a href={`tel:${TELEFONO}`} style={{color:"#fca5a5"}}>{TELEFONO}</a> · <a href={`mailto:${CORREO}`} style={{color:"#fca5a5"}}>{CORREO}</a></span></div>
+            </div>
+          </div>
+        </div>
+      )}
+      {enc.fechaTope&&!vencido&&proxima&&(
+        <div className="deadline-banner proxima">
+          <i className="ti ti-clock" style={{fontSize:20,flexShrink:0}} aria-hidden="true"></i>
+          <div><strong>Plazo próximo a vencer</strong><p style={{fontSize:13,marginTop:3}}>Fecha límite: {formatFechaTope(enc.fechaTope)}</p></div>
+        </div>
+      )}
+      {enc.fechaTope&&!vencido&&!proxima&&(
+        <div className="alert alert-info" style={{marginBottom:"1rem"}}>
+          <i className="ti ti-calendar" aria-hidden="true"></i>
+          <span>Fecha límite de entrega: <strong>{formatFechaTope(enc.fechaTope)}</strong></span>
+        </div>
+      )}
+
+      {/* Encabezado encuestador */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.5rem"}}>
+        <div className="avatar">{initials}</div>
+        <div><h1 style={{fontSize:20,fontWeight:600}}>{enc.nombre}</h1><p className="muted"><code>{enc.rut}</code> · {enc.proyecto}</p></div>
+      </div>
+
+      {/* Contrato */}
+      {!enc.contrato&&(
+        <div className="alert alert-warning" style={{marginBottom:"1rem"}}>
+          <i className="ti ti-alert-triangle" aria-hidden="true"></i>
+          <div>
+            <strong>Contrato de honorarios pendiente</strong>
+            <p style={{marginTop:4,fontSize:13}}>Aún no tienes firmado tu contrato. Debes contactarte con el jefe de campo.</p>
+            <div className="contact-box" style={{marginTop:10}}>
+              <div className="contact-row"><i className="ti ti-user" style={{fontSize:15}} aria-hidden="true"></i><span><strong>Jefe de campo:</strong> {JEFE}</span></div>
+              <div className="contact-row"><i className="ti ti-phone" style={{fontSize:15}} aria-hidden="true"></i><span><strong>Teléfono:</strong> <a href={`tel:${TELEFONO}`} style={{color:"var(--amber)"}}>{TELEFONO}</a></span></div>
+              <div className="contact-row"><i className="ti ti-mail" style={{fontSize:15}} aria-hidden="true"></i><span><strong>Correo:</strong> <a href={`mailto:${CORREO}`} style={{color:"var(--amber)"}}>{CORREO}</a></span></div>
+            </div>
+          </div>
+        </div>
+      )}
+      {enc.contrato&&<div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check" aria-hidden="true"></i><span>Al día con la firma del contrato de honorarios.</span></div>}
+
+      {/* Detalle pago */}
+      <div className="card" style={{marginBottom:"1rem"}}>
+        <p className="section-title">Detalle de pago</p>
+        <div className="stat-grid" style={{marginBottom:"1rem"}}>
+          <div className="stat-card"><div className="stat-label">Monto a cobrar</div><div className="stat-value">${enc.monto.toLocaleString("es-CL")}</div></div>
+          <div className="stat-card"><div className="stat-label">Cantidad de encuestas</div><div className="stat-value">{enc.encuestas}</div></div>
+        </div>
+        <div className="stat-card" style={{background:"var(--blue-light)"}}>
+          <div className="stat-label" style={{color:"var(--blue)"}}>Proyecto</div>
+          <div style={{fontWeight:500,marginTop:4,color:"var(--blue)"}}>{enc.proyecto}</div>
+        </div>
+      </div>
+
+      {/* Datos tributarios */}
+      <div className="card" style={{marginBottom:"1rem"}}>
+        <p className="section-title"><i className="ti ti-building" style={{marginRight:6,color:"var(--blue)"}} aria-hidden="true"></i>Datos tributarios para emitir boleta</p>
+        <p className="muted" style={{marginBottom:"0.75rem"}}>Emite tu boleta de honorarios a nombre de:</p>
+        <div style={{background:"#faf9f6",border:"1px solid var(--gray-border)",borderRadius:"var(--radius)",padding:"14px 16px"}}>
+          <p style={{fontWeight:600,fontSize:15,marginBottom:6}}>{enc.empresa}</p>
+          <p className="muted"><strong>RUT:</strong> {enc.empresaRUT}</p>
+          {enc.empresaDir&&<p className="muted"><strong>Dirección:</strong> {enc.empresaDir}</p>}
+        </div>
+      </div>
+
+      {/* Datos bancarios */}
+      <div className="card" style={{marginBottom:"1rem"}}>
+        <p className="section-title"><i className="ti ti-building-bank" style={{marginRight:6,color:"var(--blue)"}} aria-hidden="true"></i>Datos bancarios para el pago</p>
+        {ctaSaved?(
+          <div className="alert alert-success">
+            <i className="ti ti-circle-check" aria-hidden="true"></i>
+            <div>
+              <strong>Datos bancarios guardados</strong>
+              <p style={{fontSize:13,marginTop:2}}>{banco} · {tipoCta} · N° {numCta}</p>
+              <button className="btn btn-sm" style={{marginTop:8}} onClick={()=>setCtaSaved(false)}><i className="ti ti-edit" aria-hidden="true"></i> Editar</button>
+            </div>
+          </div>
+        ):(
+          <>
+            <div className="form-group">
+              <label className="form-label">Tipo de cuenta</label>
+              <select className="form-input" value={tipoCta} onChange={e=>handleTipo(e.target.value)}>
+                <option value="">Selecciona el tipo</option>
+                {TIPOS_CUENTA.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Banco</label>
+              <select className="form-input" value={banco} onChange={e=>setBanco(e.target.value)} disabled={esRUT}>
+                <option value="">Selecciona el banco</option>
+                {BANCOS.map(b=><option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Número de cuenta</label>
+              <input className="form-input" value={numCta} placeholder="Ej: 00012345678" onChange={e=>setNumCta(e.target.value)} disabled={esRUT} />
+            </div>
+            <button className="btn btn-primary" onClick={guardarCuenta}><i className="ti ti-check" aria-hidden="true"></i> Guardar datos bancarios</button>
+          </>
+        )}
+      </div>
+
+      {/* Subir boleta */}
+      <div className="card" style={{marginBottom:"1rem"}}>
+        <p className="section-title"><i className="ti ti-cloud-upload" style={{marginRight:6,color:"var(--blue)"}} aria-hidden="true"></i>Subir boleta de honorarios</p>
+        {vencido?(
+          <div className="alert alert-danger">
+            <i className="ti ti-lock" aria-hidden="true"></i>
+            <div><strong>Envío bloqueado</strong><p style={{fontSize:13,marginTop:3}}>El plazo de recepción ha vencido. Contáctate con tu coordinador: <strong>{JEFE}</strong> · {TELEFONO} · {CORREO}</p></div>
+          </div>
+        ):!done?(
+          <>
+            {!token&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Al subir tu boleta se abrirá una ventana para iniciar sesión con Google.</span></div>}
+            <div className="form-group"><label className="form-label">Número de boleta</label><input className="form-input" value={numBoleta} placeholder="Ej: BOL-2026-001" onChange={e=>setNum(e.target.value)} /></div>
+            <div style={{border:"2px dashed rgba(0,0,0,0.15)",borderRadius:"var(--radius-lg)",padding:"2rem 1rem",textAlign:"center",cursor:"pointer",background:"#faf9f6",marginBottom:"1rem"}} onClick={()=>fileRef.current.click()}>
+              <i className="ti ti-file-type-pdf" style={{fontSize:36,color:"var(--red)",display:"block",marginBottom:6}} aria-hidden="true"></i>
+              {file?<><p style={{fontWeight:500}}>{file.name}</p><p className="muted">{(file.size/1024).toFixed(1)} KB · PDF</p></>:<><p style={{fontWeight:500}}>Seleccionar PDF</p><p className="muted">Solo se admiten archivos PDF</p></>}
+              <input ref={fileRef} type="file" accept="application/pdf" style={{display:"none"}} onChange={handleFile} />
+            </div>
+            <button className="btn btn-primary" style={{width:"100%"}} onClick={handleSubir} disabled={uploading||authLoad}>
+              {uploading||authLoad?<><span className="spinner"></span>{authLoad?"Autenticando...":"Subiendo a OneDrive..."}</>:<><i className="ti ti-cloud-upload" aria-hidden="true"></i> Subir boleta a OneDrive</>}
+            </button>
+          </>
+        ):(
+          <div className="alert alert-success"><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Boleta enviada correctamente</strong><p style={{fontSize:13,marginTop:3}}>N° {numBoleta} · Guardada en Google Drive/{FOLDER_ROOT}/{getMesCarpeta()}</p></div></div>
+        )}
+        {msg.text&&!done&&!vencido&&<div className={`alert alert-${msg.type}`} style={{marginTop:"0.75rem"}}><i className={`ti ${msg.type==="success"?"ti-check":msg.type==="danger"?"ti-x":"ti-info-circle"}`} aria-hidden="true"></i>{msg.text}</div>}
+      </div>
+
+      {/* Contacto siempre visible */}
+      <div className="card">
+        <p className="section-title"><i className="ti ti-headset" style={{marginRight:6,color:"var(--blue)"}} aria-hidden="true"></i>Contacto jefe de campo</p>
+        <div className="contact-box">
+          <div className="contact-row"><i className="ti ti-user" style={{fontSize:15}} aria-hidden="true"></i><span><strong>Nombre:</strong> {JEFE}</span></div>
+          <div className="contact-row"><i className="ti ti-phone" style={{fontSize:15}} aria-hidden="true"></i><span><strong>Teléfono:</strong> <a href={`tel:${TELEFONO}`} style={{color:"var(--blue)"}}>{TELEFONO}</a></span></div>
+          <div className="contact-row"><i className="ti ti-mail" style={{fontSize:15}} aria-hidden="true"></i><span><strong>Correo:</strong> <a href={`mailto:${CORREO}`} style={{color:"var(--blue)"}}>{CORREO}</a></span></div>
+        </div>
+      </div>
+
+    </div>
+  </>);
+}
+
+ReactDOM.render(<App />,document.getElementById("root"));
+</script>
+</body>
+</html>
