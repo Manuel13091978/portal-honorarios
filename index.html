@@ -556,6 +556,7 @@ function EncView({filas,data,setData,onBack}){
   const initials=enc.nombre.split(" ").map(n=>n[0]).slice(0,2).join("");
 
   const [numBoleta,setNum]=useState(enc.numBoleta||"");
+  const numBoletaRef=useRef(enc.numBoleta||"");
   const [uploading,setUpl]=useState(false);
   const [done,setDone]=useState(enc.boleta||false);
   const [msg,setMsg]=useState({text:"",type:""});
@@ -591,7 +592,8 @@ function EncView({filas,data,setData,onBack}){
     if(!f)return;
     if(f.type!=="application/pdf"){setMsg({text:"Solo se aceptan archivos PDF.",type:"danger"});return;}
     if(f.size>5*1024*1024){setMsg({text:"El archivo no debe superar 5MB.",type:"danger"});return;}
-    if(!numBoleta.trim()){setMsg({text:"Ingresa el número de boleta antes de subir el archivo.",type:"danger"});return;}
+    const boletaNum=numBoletaRef.current||numBoleta;
+    if(!boletaNum.trim()){setMsg({text:"Ingresa el número de boleta antes de subir el archivo.",type:"danger"});return;}
     if(vencido){setMsg({text:"La fecha límite ha vencido. No puedes subir la boleta.",type:"danger"});return;}
     setUpl(true);
     setMsg({text:"",type:""});
@@ -600,14 +602,14 @@ function EncView({filas,data,setData,onBack}){
       const apiKey=loadFromStorage("anthropic_key","");
       if(apiKey){
         setMsg({text:"Verificando boleta con IA...",type:"info"});
-        const ver=await verificarBoleta(fileData,montoTotal,numBoleta,apiKey);
+        const ver=await verificarBoleta(fileData,montoTotal,boletaNum,apiKey);
         if(!ver.omitida&&!ver.ok){setUpl(false);setModal({errores:ver.errores});return;}
       }
       setMsg({text:"Enviando boleta por email...",type:"info"});
-      const fileName="Boleta_"+enc.nombre.replace(/\s+/g,"_")+"_"+numBoleta+".pdf";
-      const emailResult=await enviarBoletaEmail(enc,montoTotal,proyectosStr,numBoleta,fileData,fileName);
+      const fileName="Boleta_"+enc.nombre.replace(/\s+/g,"_")+"_"+boletaNum+".pdf";
+      const emailResult=await enviarBoletaEmail(enc,montoTotal,proyectosStr,boletaNum,fileData,fileName);
       if(!emailResult.ok){setMsg({text:"Error al enviar: "+emailResult.error,type:"danger"});setUpl(false);return;}
-      const updated=data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta,boletaUrl:"email"}:r);
+      const updated=data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:boletaNum,boletaUrl:"email"}:r);
       setData(updated);
       setDone(true);
       setMsg({text:"Boleta enviada correctamente a f2f@enfoque360.cl",type:"success"});
@@ -737,7 +739,7 @@ function EncView({filas,data,setData,onBack}){
           <div>
             <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle"></i><span style={{fontSize:13}}>Tu boleta se enviará automáticamente a <strong>f2f@enfoque360.cl</strong>. No necesitas iniciar sesión en ningún servicio.</span></div>
             <div className="form-group"><label className="form-label">Número de boleta</label>
-              <input className="form-input" value={numBoleta} placeholder="Ej: 123456" onChange={e=>setNum(e.target.value)} disabled={uploading} />
+              <input className="form-input" value={numBoleta} placeholder="Ej: 123456" onChange={e=>{setNum(e.target.value);numBoletaRef.current=e.target.value;}} disabled={uploading} />
             </div>
             <div className="upload-zone" style={{opacity:vencido?0.5:1,pointerEvents:vencido?"none":"auto"}} onClick={()=>!uploading&&fileRef.current.click()}>
               <i className="ti ti-file-type-pdf" style={{fontSize:36,color:"var(--blue)",display:"block",marginBottom:8}}></i>
