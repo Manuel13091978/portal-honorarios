@@ -290,7 +290,7 @@ function App(){
     const h=historial.map(p=>({...p,activa:p.id===id}));
     const planilla=h.find(p=>p.id===id);
     setHistorial(h);
-    if(planilla)setData(planilla.rows);
+    if(planilla)setData(planilla.rows, false);
   };
   const agregarHistorial=(rows,periodo)=>{
     const ahora=new Date();
@@ -388,6 +388,7 @@ function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onL
   const totalMonto=dataActiva.reduce((s,r)=>s+r.monto,0);
   const sinContrato=dataActiva.filter(r=>!r.contrato).length;
   const boletasOk=dataActiva.filter(r=>r.boleta).length;
+  const periodoActivo=planillaActiva?planillaActiva.periodo:mes.replace("_"," ");
 
   const handleExcel=e=>{
     const file=e.target.files[0];if(!file)return;
@@ -419,7 +420,7 @@ function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onL
     </header>
     <div className="page">
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.5rem",flexWrap:"wrap",gap:12}}>
-        <div><h1 style={{fontSize:20,fontWeight:600}}>Panel de administración</h1><p className="muted">{mes.replace("_"," ")}</p></div>
+        <div><h1 style={{fontSize:20,fontWeight:600}}>Panel de administración</h1><p className="muted">Planilla activa: {periodoActivo}</p></div>
         {data.length>0&&<button className="btn btn-success btn-sm" onClick={()=>descargarExcel(data)}><i className="ti ti-download"></i> Descargar Excel</button>}
       </div>
       <div className="stat-grid">
@@ -615,6 +616,12 @@ function EncView({filas,data,setData,onBack}){
       if(!emailResult.ok){setMsg({text:"Error al enviar: "+emailResult.error,type:"danger"});setUpl(false);return;}
       const updated=data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:boletaNum,boletaUrl:"email"}:r);
       setData(updated);
+      // Actualizar también el historial para que la planilla activa refleje la boleta
+      try{
+        const hist=JSON.parse(localStorage.getItem("planilla_historial")||"[]");
+        const histUpd=hist.map(p=>p.activa?{...p,rows:p.rows.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:boletaNum,boletaUrl:"email"}:r)}:p);
+        localStorage.setItem("planilla_historial",JSON.stringify(histUpd));
+      }catch(_){}
       setDone(true);
       setMsg({text:"Boleta enviada correctamente a f2f@enfoque360.cl",type:"success"});
     }catch(err){setMsg({text:"Error inesperado: "+err.message,type:"danger"});}
