@@ -322,7 +322,7 @@ function App(){
   // Al iniciar, cargar todo desde GitHub
   React.useEffect(()=>{
     const init=async()=>{
-      const gt=loadToken("github_token");
+      const gt=localStorage.getItem("github_token")||"";
       if(gt){
         const [planilla,hist]=await Promise.all([loadPlanillaGitHub(),loadHistorialGitHub()]);
         if(planilla&&planilla.length>0)setDataState(planilla);
@@ -337,7 +337,7 @@ function App(){
     init();
   },[]);
 
-  const gt=()=>loadToken("github_token");
+  const gt=()=>localStorage.getItem("github_token")||"";
 
   const setData=(rows)=>{
     setDataState(rows);
@@ -451,7 +451,7 @@ function ApiKeyForm(){
 }
 
 function GitHubTokenForm(){
-  const saved=loadFromStorage("github_token","");
+  const saved=localStorage.getItem("github_token")||"";
   const [key,setKey]=useState(saved?"••••••••••••••••":"");
   const [saved2,setSaved2]=useState(!!saved);
   const [editing,setEditing]=useState(!saved);
