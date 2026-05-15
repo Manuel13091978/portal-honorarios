@@ -236,28 +236,40 @@ function descargarExcel(data){
   XLSX.writeFile(wb,`Honorarios_${getMesCarpeta()}.xlsx`);
 }
 
-async function savePlanillaGitHub(rows,githubToken){
-  try{
-    const h={"Authorization":"token "+githubToken,"Content-Type":"application/json"};
-    const json=JSON.stringify(rows);
-    const base64=btoa(unescape(encodeURIComponent(json)));
-    let sha=null;
-    try{const r=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`,{headers:h});if(r.ok){const d=await r.json();sha=d.sha;}}catch(_){}
-    const body={message:"Actualizar planilla",content:base64};
-    if(sha)body.sha=sha;
-    const res=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`,{method:"PUT",headers:h,body:JSON.stringify(body)});
-    if(res.ok)console.log("Planilla guardada en GitHub");
-    else console.warn("Error GitHub:",await res.text());
-  }catch(e){console.warn("Error GitHub:",e.message);}
+async function githubPut(path, data, token){
+  const h={"Authorization":"token "+token,"Content-Type":"application/json"};
+  const json=JSON.stringify(data);
+  const base64=btoa(unescape(encodeURIComponent(json)));
+  let sha=null;
+  try{const r=await fetch("https://api.github.com/repos/"+GITHUB_REPO+"/contents/"+path,{headers:h});if(r.ok){const d=await r.json();sha=d.sha;}}catch(_){}
+  const body={message:"Actualizar "+path,content:base64};
+  if(sha)body.sha=sha;
+  await fetch("https://api.github.com/repos/"+GITHUB_REPO+"/contents/"+path,{method:"PUT",headers:h,body:JSON.stringify(body)});
 }
 
-async function loadPlanillaGitHub(){
+async function githubGet(path){
   try{
-    const url=`https://raw.githubusercontent.com/${GITHUB_REPO}/main/${GITHUB_FILE}?t=${Date.now()}`;
+    const url="https://raw.githubusercontent.com/"+GITHUB_REPO+"/main/"+path+"?t="+Date.now();
     const res=await fetch(url);
     if(!res.ok)return null;
     return await res.json();
-  }catch(e){console.warn("Error cargando planilla:",e.message);return null;}
+  }catch(e){return null;}
+}
+
+async function savePlanillaGitHub(rows,githubToken){
+  try{await githubPut(GITHUB_FILE,rows,githubToken);}catch(e){console.warn("Error GitHub:",e.message);}
+}
+
+async function saveHistorialGitHub(historial,githubToken){
+  try{await githubPut("historial.json",historial,githubToken);}catch(e){console.warn("Error historial:",e.message);}
+}
+
+async function loadPlanillaGitHub(){
+  return await githubGet(GITHUB_FILE);
+}
+
+async function loadHistorialGitHub(){
+  return await githubGet("historial.json");
 }
 
 async function verificarBoleta(fileData,montoEsperado,numBoletaIngresado,apiKey){
@@ -292,6 +304,10 @@ async function verificarBoleta(fileData,montoEsperado,numBoletaIngresado,apiKey)
   }
 }
 
+// Solo guardar tokens en localStorage
+function saveToken(key,value){try{localStorage.setItem(key,value);}catch(_){}}
+function loadToken(key){try{return localStorage.getItem(key)||"";}catch(_){return "";}}
+// Mantener saveToStorage/loadFromStorage para compatibilidad con ApiKeyForm y GitHubTokenForm
 function saveToStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch(_){}}
 function loadFromStorage(key,def){try{const v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(_){return def;}}
 
@@ -299,24 +315,44 @@ function App(){
   const [view,setView]=useState("home");
   const [adminAuth,setAdmin]=useState(false);
   const [encActivo,setEnc]=useState(null);
-  const [data,setDataState]=useState(()=>loadFromStorage("planilla_activa",[]));
-  const [historial,setHistorialState]=useState(()=>loadFromStorage("planilla_historial",[]));
+  const [data,setDataState]=useState([]);
+  const [historial,setHistorialState]=useState([]);
+  const [cargandoApp,setCargandoApp]=useState(true);
 
-  const setData=(rows,syncGitHub=true)=>{
+  // Al iniciar, cargar todo desde GitHub
+  React.useEffect(()=>{
+    const init=async()=>{
+      const gt=loadToken("github_token");
+      if(gt){
+        const [planilla,hist]=await Promise.all([loadPlanillaGitHub(),loadHistorialGitHub()]);
+        if(planilla&&planilla.length>0)setDataState(planilla);
+        if(hist&&hist.length>0)setHistorialState(hist);
+      } else {
+        // Sin token, intentar cargar planilla pública
+        const planilla=await loadPlanillaGitHub();
+        if(planilla&&planilla.length>0)setDataState(planilla);
+      }
+      setCargandoApp(false);
+    };
+    init();
+  },[]);
+
+  const gt=()=>loadToken("github_token");
+
+  const setData=(rows)=>{
     setDataState(rows);
-    saveToStorage("planilla_activa",rows);
-    if(syncGitHub&&rows.length>0){
-      const gt=loadFromStorage("github_token","");
-      if(gt)savePlanillaGitHub(rows,gt);
-    }
+    if(gt())savePlanillaGitHub(rows,gt());
   };
-  const setHistorial=(h)=>{setHistorialState(h);saveToStorage("planilla_historial",h);};
+
+  const setHistorial=(h)=>{
+    setHistorialState(h);
+    if(gt())saveHistorialGitHub(h,gt());
+  };
 
   const activarPlanilla=(id)=>{
-    // Guardar estado actual de boletas en la planilla que estaba activa
-    const hConBoletas=historial.map(p=>{
+    // Guardar boletas actuales en planilla que se desactiva
+    const hActualizado=historial.map(p=>{
       if(p.activa){
-        // Sincronizar boletas actuales a la planilla que se desactiva
         const rowsActualizadas=p.rows.map(r=>{
           const enData=data.find(d=>d.rut===r.rut&&d.proyecto===r.proyecto);
           return enData?{...r,boleta:enData.boleta,numBoleta:enData.numBoleta}:r;
@@ -325,21 +361,16 @@ function App(){
       }
       return{...p,activa:p.id===id};
     });
-    const planilla=hConBoletas.find(p=>p.id===id);
-    setHistorial(hConBoletas);
-    if(planilla){
-      setDataState(planilla.rows);
-      saveToStorage("planilla_activa",planilla.rows);
-      const gt=loadFromStorage("github_token","");
-      if(gt)savePlanillaGitHub(planilla.rows,gt);
-    }
+    const planilla=hActualizado.find(p=>p.id===id);
+    setHistorial(hActualizado);
+    if(planilla)setData(planilla.rows);
   };
 
   const agregarHistorial=(rows,periodo)=>{
-    // Guardar estado actual de boletas en la planilla que estaba activa antes
     const ahora=new Date();
-    const fecha=ahora.toLocaleDateString("es-CL")+' '+ahora.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"});
-    const histConBoletas=historial.map(p=>{
+    const fecha=ahora.toLocaleDateString("es-CL")+" "+ahora.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"});
+    // Guardar boletas actuales en planilla que se desactiva
+    const histActualizado=historial.map(p=>{
       if(p.activa){
         const rowsActualizadas=p.rows.map(r=>{
           const enData=data.find(d=>d.rut===r.rut&&d.proyecto===r.proyecto);
@@ -350,15 +381,12 @@ function App(){
       return{...p,activa:false};
     });
     const nueva={id:Date.now(),fecha,periodo:periodo||getMesCarpeta().replace("_"," "),rows,activa:true};
-    const h=[nueva,...histConBoletas].slice(0,6);
+    const h=[nueva,...histActualizado].slice(0,6);
     setHistorial(h);
-    // Reemplazar data completamente con solo la nueva planilla
-    setDataState(rows);
-    saveToStorage("planilla_activa",rows);
-    const gt=loadFromStorage("github_token","");
-    if(gt)savePlanillaGitHub(rows,gt);
+    setData(rows);
   };
 
+  if(cargandoApp)return(<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16}}><div style={{width:40,height:40,border:"3px solid var(--blue-light)",borderTop:"3px solid var(--blue)",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}></div><p style={{color:"var(--gray-muted)",fontSize:14}}>Cargando portal...</p></div>);
   if(view==="home")return <Home onAdmin={()=>setView("admin")} onEnc={()=>setView("encuestador")} />;
   if(view==="admin"){
     if(!adminAuth)return <AdminLogin onOk={()=>setAdmin(true)} onBack={()=>setView("home")} />;
@@ -429,7 +457,7 @@ function GitHubTokenForm(){
   const [editing,setEditing]=useState(!saved);
   const guardar=()=>{
     if(!key.trim()||key.includes("•"))return;
-    saveToStorage("github_token",key.trim());
+    localStorage.setItem("github_token",key.trim());
     setSaved2(true);setEditing(false);setKey("••••••••••••••••");
   };
   if(!editing&&saved2)return(<div className="alert alert-success"><i className="ti ti-circle-check"></i><div><strong>GitHub token configurado</strong><p style={{fontSize:13,marginTop:2}}>La planilla se sincroniza automáticamente.</p><button className="btn btn-sm" style={{marginTop:8}} onClick={()=>{setEditing(true);setKey("");}}><i className="ti ti-edit"></i> Cambiar token</button></div></div>);
@@ -580,8 +608,7 @@ function EncLogin({data,setData,onOk,onBack}){
       try{
         const rows=await loadPlanillaGitHub();
         if(rows&&rows.length>0){
-          setData(rows, false);
-          // Si ya hay un RUT ingresado, buscar automáticamente con datos frescos
+          setData(rows);
           if(rut.trim()) buscar(rows);
         }
       }catch(_){}
@@ -679,7 +706,7 @@ function EncView({filas,data,setData,onBack}){
       const fileName="Boleta_"+enc.nombre.replace(/\s+/g,"_")+"_"+boletaNum+".pdf";
       // Guardar PDF en GitHub
       let pdfUrl = null;
-      const githubToken = loadFromStorage("github_token","");
+      const githubToken = localStorage.getItem("github_token")||"";
       if(githubToken){
         setMsg({text:"Guardando boleta en repositorio...",type:"info"});
         pdfUrl = await guardarPDFGitHub(fileData, fileName, githubToken);
@@ -687,14 +714,8 @@ function EncView({filas,data,setData,onBack}){
       setMsg({text:"Enviando email...",type:"info"});
       const emailResult=await enviarBoletaEmail(enc,montoTotal,proyectosStr,boletaNum,fileData,fileName,pdfUrl);
       if(!emailResult.ok){setMsg({text:"Error al enviar: "+emailResult.error,type:"danger"});setUpl(false);return;}
-      const updated=data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:boletaNum,boletaUrl:"email"}:r);
+      const updated=data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:boletaNum,boletaUrl:pdfUrl||"email"}:r);
       setData(updated);
-      // Actualizar también el historial para que la planilla activa refleje la boleta
-      try{
-        const hist=JSON.parse(localStorage.getItem("planilla_historial")||"[]");
-        const histUpd=hist.map(p=>p.activa?{...p,rows:p.rows.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:boletaNum,boletaUrl:"email"}:r)}:p);
-        localStorage.setItem("planilla_historial",JSON.stringify(histUpd));
-      }catch(_){}
       setDone(true);
       setMsg({text:"Boleta enviada correctamente a f2f@enfoque360.cl",type:"success"});
     }catch(err){setMsg({text:"Error inesperado: "+err.message,type:"danger"});}
