@@ -109,22 +109,7 @@ const TIPOS_CUENTA = ["RUT","CORRIENTE","VISTA","AHORRO","CHEQUERA ELECTRONICA"]
 // Inicializar EmailJS
 emailjs.init(EMAILJS_PUBLIC_KEY);
 
-async function enviarBoletaEmail(enc, montoTotal, proyectos, numBoleta, fileData, fileName) {
-  try {
-    // Convertir PDF a base64
-    const bytes = new Uint8Array(fileData);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const base64pdf = btoa(binary);
-
-    const fecha = new Date().toLocaleDateString("es-CL", {
-      day:"2-digit", month:"2-digit", year:"numeric",
-      hour:"2-digit", minute:"2-digit"
-    });
-
-    const templateParams = {
-      encuestador_nombre: enc.nombre,
-      encuestador_rut:    enc.rut,
+encuestador_rut:    enc.rut,
       monto_total:        "$" + montoTotal.toLocaleString("es-CL"),
       proyecto:           proyectos,
       fecha:              fecha,
@@ -563,9 +548,9 @@ function EncView({filas,data,setData,onBack}){
   const encuestasTotal=filas.reduce((s,r)=>s+r.encuestas,0);
   const multiProyecto=filas.length>1;
   const proyectosStr=filas.map(f=>f.proyecto).filter(Boolean).join(", ")||"-";
+  const initials=enc.nombre.split(" ").map(n=>n[0]).slice(0,2).join("");
 
   const [numBoleta,setNum]=useState(enc.numBoleta||"");
-  const [file,setFile]=useState(null);
   const [uploading,setUpl]=useState(false);
   const [done,setDone]=useState(enc.boleta||false);
   const [msg,setMsg]=useState({text:"",type:""});
@@ -578,14 +563,22 @@ function EncView({filas,data,setData,onBack}){
 
   const vencido=isVencido(enc.fechaTope);
   const proxima=isProxima(enc.fechaTope);
+  const esRUT=tipoCta==="RUT";
+
+  const handleTipo=val=>{
+    setTipoCta(val);
+    if(val==="RUT"){setBanco("ESTADO");setNumCta(rutSinDigito(enc.rut));}
+    else{setBanco("");setNumCta("");}
+  };
 
   const guardarCuenta=()=>{
-    if(!tipoCta||!banco||!numCta){setMsg({text:"Completa todos los datos de tu cuenta bancaria.",type:"danger"});return;}
+    if(!tipoCta){setMsg({text:"Selecciona el tipo de cuenta.",type:"warning"});return;}
+    if(!esRUT&&!banco){setMsg({text:"Selecciona el banco.",type:"warning"});return;}
+    if(!numCta.trim()){setMsg({text:"Ingresa el número de cuenta.",type:"warning"});return;}
     const updated=data.map(r=>r.rut===enc.rut?{...r,tipoCuenta:tipoCta,banco,numCuenta:numCta}:r);
     setData(updated);
     setCtaSaved(true);
-    setMsg({text:"✓ Datos bancarios guardados correctamente.",type:"success"});
-    setTimeout(()=>setMsg({text:"",type:""}),3000);
+    setMsg({text:"",type:""});
   };
 
   const handleFile=async(e)=>{
@@ -595,46 +588,25 @@ function EncView({filas,data,setData,onBack}){
     if(f.size>5*1024*1024){setMsg({text:"El archivo no debe superar 5MB.",type:"danger"});return;}
     if(!numBoleta.trim()){setMsg({text:"Ingresa el número de boleta antes de subir el archivo.",type:"danger"});return;}
     if(vencido){setMsg({text:"La fecha límite ha vencido. No puedes subir la boleta.",type:"danger"});return;}
-
-    setFile(f);
     setUpl(true);
     setMsg({text:"",type:""});
-
     try{
       const fileData=await f.arrayBuffer();
       const apiKey=loadFromStorage("anthropic_key","");
-
-      // Verificación IA si hay API key
       if(apiKey){
         setMsg({text:"Verificando boleta con IA...",type:"info"});
         const ver=await verificarBoleta(fileData,montoTotal,numBoleta,apiKey);
-        if(!ver.omitida&&!ver.ok){
-          setUpl(false);
-          setModal({errores:ver.errores,fileData,fileName:f.name});
-          return;
-        }
+        if(!ver.omitida&&!ver.ok){setUpl(false);setModal({errores:ver.errores});return;}
       }
-
-      // Enviar por email con EmailJS
       setMsg({text:"Enviando boleta por email...",type:"info"});
-      const fileName=`Boleta_${enc.nombre.replace(/\s+/g,"_")}_${numBoleta}.pdf`;
+      const fileName="Boleta_"+enc.nombre.replace(/\s+/g,"_")+"_"+numBoleta+".pdf";
       const emailResult=await enviarBoletaEmail(enc,montoTotal,proyectosStr,numBoleta,fileData,fileName);
-
-      if(!emailResult.ok){
-        setMsg({text:`Error al enviar el email: ${emailResult.error}. Intenta nuevamente.`,type:"danger"});
-        setUpl(false);
-        return;
-      }
-
-      // Actualizar estado en planilla
+      if(!emailResult.ok){setMsg({text:"Error al enviar: "+emailResult.error,type:"danger"});setUpl(false);return;}
       const updated=data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta,boletaUrl:"email"}:r);
       setData(updated);
       setDone(true);
-      setMsg({text:"✓ Boleta enviada correctamente a f2f@enfoque360.cl",type:"success"});
-
-    }catch(err){
-      setMsg({text:"Error inesperado: "+err.message,type:"danger"});
-    }
+      setMsg({text:"Boleta enviada correctamente a f2f@enfoque360.cl",type:"success"});
+    }catch(err){setMsg({text:"Error inesperado: "+err.message,type:"danger"});}
     setUpl(false);
     e.target.value="";
   };
@@ -645,123 +617,121 @@ function EncView({filas,data,setData,onBack}){
       <button className="btn btn-ghost btn-sm" onClick={onBack}><i className="ti ti-arrow-left"></i> Volver</button>
     </header>
 
-    {/* Modal de error IA */}
     {modalData&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
         <div className="card" style={{maxWidth:420,width:"100%"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1rem"}}>
-            <div style={{width:40,height:40,borderRadius:"50%",background:"var(--red-light)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <i className="ti ti-alert-triangle" style={{fontSize:20,color:"var(--red)"}}></i>
-            </div>
-            <div>
-              <p style={{fontWeight:600,color:"var(--red)"}}>Boleta incorrecta</p>
-              <p style={{fontSize:13,color:"var(--gray-muted)"}}>La IA detectó los siguientes problemas:</p>
-            </div>
+            <div style={{width:40,height:40,borderRadius:"50%",background:"var(--red-light)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><i className="ti ti-alert-triangle" style={{fontSize:20,color:"var(--red)"}}></i></div>
+            <div><p style={{fontWeight:600,color:"var(--red)"}}>Boleta incorrecta</p><p style={{fontSize:13,color:"var(--gray-muted)"}}>La IA detectó los siguientes problemas:</p></div>
           </div>
-          {modalData.errores.map((e,i)=>(
-            <div key={i} className="alert alert-danger" style={{marginBottom:8}}><i className="ti ti-x"></i><span>{e}</span></div>
-          ))}
+          {modalData.errores.map((e,i)=><div key={i} className="alert alert-danger" style={{marginBottom:8}}><i className="ti ti-x"></i><span>{e}</span></div>)}
           <p style={{fontSize:13,color:"var(--gray-muted)",margin:"1rem 0 0.75rem"}}>Debes subir la boleta correcta. Si crees que es un error, contacta al jefe de campo.</p>
           <button className="btn btn-primary" style={{width:"100%"}} onClick={()=>setModal(null)}><i className="ti ti-arrow-left"></i> Volver y corregir</button>
         </div>
       </div>
     )}
 
-    <div className="page-narrow" style={{marginTop:24}}>
-      {enc.fechaTope&&vencido&&<div className="deadline-banner"><i className="ti ti-clock-x" style={{fontSize:20,flexShrink:0}}></i><div><strong>Fecha límite vencida</strong><p style={{fontSize:13,marginTop:2,opacity:0.9}}>El plazo venció el {formatFechaTope(enc.fechaTope)}.</p></div></div>}
-      {enc.fechaTope&&!vencido&&proxima&&<div className="deadline-banner proxima"><i className="ti ti-clock-exclamation" style={{fontSize:20,flexShrink:0}}></i><div><strong>¡Vence pronto!</strong><p style={{fontSize:13,marginTop:2,opacity:0.9}}>Fecha límite: {formatFechaTope(enc.fechaTope)}</p></div></div>}
-      {enc.fechaTope&&!vencido&&!proxima&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-calendar"></i><span>Fecha límite: <strong>{formatFechaTope(enc.fechaTope)}</strong></span></div>}
+    <div className="page" style={{maxWidth:640}}>
 
       <div className="info-banner">
-        <div className="periodo">{enc.periodo||getMesCarpeta().replace("_"," ")}</div>
-        <div className="empresa-name">{enc.nombre}</div>
-        <div style={{fontSize:13,opacity:0.75,marginTop:4}}>{enc.rut}</div>
+        <div className="periodo">Período de pago</div>
+        <div className="empresa-name">Asesorías Y Gestión Enfoque Spa · {(enc.periodo||getMesCarpeta().replace("_"," ")).toUpperCase()}</div>
       </div>
 
-      {/* Monto total */}
-      <div className="card" style={{marginBottom:"1rem"}}>
-        <div style={{textAlign:"center",padding:"0.5rem 0"}}>
-          <p style={{fontSize:13,color:"var(--gray-muted)",marginBottom:4}}>Monto total a cobrar</p>
-          <p style={{fontSize:36,fontWeight:700,color:"var(--blue-dark)",letterSpacing:"-1px"}}>${montoTotal.toLocaleString("es-CL")}</p>
-          {multiProyecto&&<p style={{fontSize:12,color:"var(--gray-muted)",marginTop:4}}>Suma de {filas.length} proyectos</p>}
+      {enc.fechaTope&&vencido&&<div className="deadline-banner"><i className="ti ti-lock" style={{fontSize:20,flexShrink:0}}></i><div><strong>Plazo de recepción vencido</strong><p style={{fontSize:13,marginTop:3}}>El plazo venció el {formatFechaTope(enc.fechaTope)}.</p></div></div>}
+      {enc.fechaTope&&!vencido&&proxima&&<div className="deadline-banner proxima"><i className="ti ti-clock" style={{fontSize:20,flexShrink:0}}></i><div><strong>¡Plazo próximo a vencer!</strong><p style={{fontSize:13,marginTop:3}}>Fecha límite: {formatFechaTope(enc.fechaTope)}</p></div></div>}
+      {enc.fechaTope&&!vencido&&!proxima&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-calendar"></i><span>Fecha límite de entrega: <strong>{formatFechaTope(enc.fechaTope)}</strong></span></div>}
+
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.5rem"}}>
+        <div className="avatar">{initials}</div>
+        <div>
+          <h1 style={{fontSize:20,fontWeight:600}}>{enc.nombre}</h1>
+          <p className="muted"><code>{enc.rut}</code></p>
         </div>
-        {multiProyecto&&(
-          <div style={{borderTop:"1px solid var(--gray-border)",paddingTop:"0.75rem",marginTop:"0.5rem"}}>
+      </div>
+
+      {!enc.contrato&&<div className="alert alert-warning" style={{marginBottom:"1rem"}}><i className="ti ti-alert-triangle"></i><div><strong>Contrato de honorarios pendiente</strong><p style={{marginTop:4,fontSize:13}}>Aún no tienes firmado tu contrato. Contacta al jefe de campo.</p></div></div>}
+      {enc.contrato&&<div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check"></i><span>Al día con la firma del contrato de honorarios.</span></div>}
+
+      <div className="card" style={{marginBottom:"1rem"}}>
+        <p className="section-title">Detalle de pago</p>
+        <div className="stat-grid" style={{marginBottom:"1rem"}}>
+          <div className="stat-card"><div className="stat-label">Monto total a cobrar</div><div className="stat-value" style={{fontSize:26,color:"var(--blue-dark)"}}>${montoTotal.toLocaleString("es-CL")}</div></div>
+          <div className="stat-card"><div className="stat-label">Total encuestas</div><div className="stat-value">{encuestasTotal}</div></div>
+        </div>
+        {multiProyecto?(
+          <div>
+            <p style={{fontSize:13,fontWeight:500,marginBottom:8,color:"var(--gray-muted)"}}>Detalle por proyecto:</p>
             {filas.map((f,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"4px 0",borderBottom:i<filas.length-1?"1px solid rgba(0,0,0,0.05)":"none"}}>
-                <span style={{color:"var(--gray-muted)"}}>{f.proyecto}</span>
-                <span style={{fontWeight:500}}>${f.monto.toLocaleString("es-CL")}</span>
+              <div key={i} style={{background:"var(--blue-light)",borderRadius:"var(--radius)",padding:"10px 14px",marginBottom:6}}>
+                <div style={{fontWeight:600,color:"var(--blue)",fontSize:14}}>{f.proyecto}</div>
+                <div style={{fontSize:13,color:"var(--blue)",opacity:0.8,marginTop:2}}>{f.encuestas} encuestas · ${f.monto.toLocaleString("es-CL")}</div>
               </div>
             ))}
           </div>
+        ):(
+          <div style={{background:"var(--blue-light)",borderRadius:"var(--radius)",padding:"10px 14px",marginBottom:"0.5rem"}}>
+            <div style={{fontWeight:600,color:"var(--blue)",fontSize:14}}>{enc.proyecto}</div>
+            <div style={{fontSize:13,color:"var(--blue)",opacity:0.8,marginTop:2}}>{enc.encuestas} encuestas</div>
+          </div>
         )}
+        <div style={{background:"var(--blue-dark)",borderRadius:"var(--radius)",padding:"16px",textAlign:"center",marginTop:"1rem"}}>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:4}}>Monto total a emitir en boleta</div>
+          <div style={{fontSize:32,fontWeight:700,color:"white",letterSpacing:"-1px"}}>${montoTotal.toLocaleString("es-CL")}</div>
+        </div>
       </div>
 
-      {/* Datos bancarios */}
+      {enc.empresa&&<div className="card" style={{marginBottom:"1rem"}}>
+        <p className="section-title"><i className="ti ti-building" style={{marginRight:6,color:"var(--blue)"}}></i>Datos tributarios para emitir boleta</p>
+        <p className="muted" style={{marginBottom:"0.75rem"}}>Emite tu boleta de honorarios a nombre de:</p>
+        <div style={{background:"#faf9f6",border:"1px solid var(--gray-border)",borderRadius:"var(--radius)",padding:"14px 16px"}}>
+          <p style={{fontWeight:600,fontSize:15,marginBottom:6}}>{enc.empresa}</p>
+          {enc.empresaRUT&&<p className="muted"><strong>RUT:</strong> {enc.empresaRUT}</p>}
+          {enc.empresaDir&&<p className="muted"><strong>Dirección:</strong> {enc.empresaDir}</p>}
+        </div>
+      </div>}
+
       <div className="card" style={{marginBottom:"1rem"}}>
-        <p className="section-title"><i className="ti ti-building-bank" style={{marginRight:6}}></i>Datos bancarios</p>
+        <p className="section-title"><i className="ti ti-building-bank" style={{marginRight:6,color:"var(--blue)"}}></i>Datos bancarios para el pago</p>
         {ctaSaved?(
-          <div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:"0.75rem"}}>
-              <div style={{background:"#faf9f6",borderRadius:"var(--radius)",padding:"10px 12px"}}>
-                <div style={{fontSize:11,color:"var(--gray-muted)",marginBottom:2}}>Banco</div>
-                <div style={{fontSize:13,fontWeight:500}}>{enc.banco||banco}</div>
-              </div>
-              <div style={{background:"#faf9f6",borderRadius:"var(--radius)",padding:"10px 12px"}}>
-                <div style={{fontSize:11,color:"var(--gray-muted)",marginBottom:2}}>Tipo cuenta</div>
-                <div style={{fontSize:13,fontWeight:500}}>{enc.tipoCuenta||tipoCta}</div>
-              </div>
+          <div className="alert alert-success">
+            <i className="ti ti-circle-check"></i>
+            <div>
+              <strong>Datos bancarios guardados</strong>
+              <p style={{fontSize:13,marginTop:2}}>{enc.banco||banco} · {enc.tipoCuenta||tipoCta} · N° {enc.numCuenta||numCta}</p>
+              <button className="btn btn-sm" style={{marginTop:8}} onClick={()=>setCtaSaved(false)}><i className="ti ti-edit"></i> Editar</button>
             </div>
-            <div style={{background:"#faf9f6",borderRadius:"var(--radius)",padding:"10px 12px",marginBottom:"0.75rem"}}>
-              <div style={{fontSize:11,color:"var(--gray-muted)",marginBottom:2}}>Número de cuenta</div>
-              <div style={{fontSize:13,fontWeight:500,fontFamily:"'DM Mono',monospace"}}>{enc.numCuenta||numCta}</div>
-            </div>
-            <button className="btn btn-sm" onClick={()=>setCtaSaved(false)}><i className="ti ti-edit"></i> Editar datos</button>
           </div>
         ):(
           <div>
-            <div className="form-group">
-              <label className="form-label">Banco</label>
-              <select className="form-input" value={banco} onChange={e=>setBanco(e.target.value)}>
-                <option value="">Selecciona banco...</option>
-                {BANCOS.map(b=><option key={b} value={b}>{b}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Tipo de cuenta</label>
-              <select className="form-input" value={tipoCta} onChange={e=>setTipoCta(e.target.value)}>
+            <div className="form-group"><label className="form-label">Tipo de cuenta</label>
+              <select className="form-input" value={tipoCta} onChange={e=>handleTipo(e.target.value)}>
                 <option value="">Selecciona tipo...</option>
                 {TIPOS_CUENTA.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div className="form-group">
-              <label className="form-label">Número de cuenta</label>
-              <input className="form-input" value={numCta} placeholder="Ej: 12345678" onChange={e=>setNumCta(e.target.value)} />
+            {!esRUT&&<div className="form-group"><label className="form-label">Banco</label>
+              <select className="form-input" value={banco} onChange={e=>setBanco(e.target.value)}>
+                <option value="">Selecciona banco...</option>
+                {BANCOS.map(b=><option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>}
+            <div className="form-group"><label className="form-label">Número de cuenta</label>
+              <input className="form-input" value={numCta} placeholder="Ej: 12345678" onChange={e=>setNumCta(e.target.value)} disabled={esRUT} />
             </div>
             <button className="btn btn-primary" onClick={guardarCuenta}><i className="ti ti-check"></i> Guardar datos bancarios</button>
           </div>
         )}
       </div>
 
-      {/* Subir boleta */}
       <div className="card" style={{marginBottom:"1rem"}}>
         <p className="section-title"><i className="ti ti-mail" style={{marginRight:6}}></i>Enviar boleta</p>
         {done?(
-          <div className="alert alert-success">
-            <i className="ti ti-circle-check"></i>
-            <div>
-              <strong>Boleta enviada correctamente</strong>
-              <p style={{fontSize:13,marginTop:3}}>N° {enc.numBoleta} enviada a <code>f2f@enfoque360.cl</code></p>
-            </div>
-          </div>
+          <div className="alert alert-success"><i className="ti ti-circle-check"></i><div><strong>¡Boleta enviada correctamente!</strong><p style={{fontSize:13,marginTop:3}}>N° {enc.numBoleta} enviada a <code>f2f@enfoque360.cl</code></p></div></div>
         ):(
           <div>
-            <div className="alert alert-info" style={{marginBottom:"1rem"}}>
-              <i className="ti ti-info-circle"></i>
-              <span style={{fontSize:13}}>Tu boleta se enviará automáticamente por email a <strong>f2f@enfoque360.cl</strong>. No necesitas iniciar sesión en ningún servicio.</span>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Número de boleta</label>
+            <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle"></i><span style={{fontSize:13}}>Tu boleta se enviará automáticamente a <strong>f2f@enfoque360.cl</strong>. No necesitas iniciar sesión en ningún servicio.</span></div>
+            <div className="form-group"><label className="form-label">Número de boleta</label>
               <input className="form-input" value={numBoleta} placeholder="Ej: 123456" onChange={e=>setNum(e.target.value)} disabled={uploading} />
             </div>
             <div className="upload-zone" style={{opacity:vencido?0.5:1,pointerEvents:vencido?"none":"auto"}} onClick={()=>!uploading&&fileRef.current.click()}>
@@ -773,18 +743,18 @@ function EncView({filas,data,setData,onBack}){
             {uploading&&<div className="alert alert-info" style={{marginTop:"0.75rem"}}><i className="ti ti-loader"></i><span>Procesando y enviando boleta...</span></div>}
           </div>
         )}
-        {msg.text&&<div className={`alert alert-${msg.type}`} style={{marginTop:"0.75rem"}}><i className={`ti ti-${msg.type==="success"?"circle-check":msg.type==="info"?"info-circle":"alert-triangle"}`}></i><span>{msg.text}</span></div>}
+        {msg.text&&<div className={"alert alert-"+msg.type} style={{marginTop:"0.75rem"}}><i className={"ti ti-"+(msg.type==="success"?"circle-check":msg.type==="info"?"info-circle":"alert-triangle")}></i><span>{msg.text}</span></div>}
       </div>
 
-      {/* Contacto */}
       <div className="contact-box" style={{marginBottom:"2rem"}}>
         <div className="contact-row"><i className="ti ti-user" style={{fontSize:15}}></i><span>Jefe de campo: <strong>{JEFE}</strong></span></div>
-        <div className="contact-row"><i className="ti ti-phone" style={{fontSize:15}}></i><a href={`tel:+56${TELEFONO}`} style={{color:"var(--blue)",textDecoration:"none"}}><strong>+56 {TELEFONO}</strong></a></div>
-        <div className="contact-row"><i className="ti ti-mail" style={{fontSize:15}}></i><a href={`mailto:${CORREO}`} style={{color:"var(--blue)",textDecoration:"none"}}>{CORREO}</a></div>
+        <div className="contact-row"><i className="ti ti-phone" style={{fontSize:15}}></i><a href={"tel:+56"+TELEFONO} style={{color:"var(--blue)",textDecoration:"none"}}><strong>+56 {TELEFONO}</strong></a></div>
+        <div className="contact-row"><i className="ti ti-mail" style={{fontSize:15}}></i><a href={"mailto:"+CORREO} style={{color:"var(--blue)",textDecoration:"none"}}>{CORREO}</a></div>
       </div>
     </div>
   </>);
 }
+
 
 const root=ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App />);
