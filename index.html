@@ -639,15 +639,29 @@ function EncView({filas,data,setData,token,setToken,onBack}){
 
   // Load token from localStorage on mount if not passed via props
   React.useEffect(()=>{
-    if(!token){
-      try{
-        const t=localStorage.getItem("gdrive_token");
-        const exp=Number(localStorage.getItem("gdrive_token_expiry")||0);
-        if(t&&Date.now()<exp){setLocalToken(t);setToken(t);}
-      }catch(_){}
-    } else {
-      setLocalToken(token);
-    }
+    const loadTok = async () => {
+      if(!token){
+        // First try localStorage
+        try{
+          const t=localStorage.getItem("gdrive_token");
+          const exp=Number(localStorage.getItem("gdrive_token_expiry")||0);
+          if(t&&Date.now()<exp){setLocalToken(t);setToken(t);return;}
+        }catch(_){}
+        // Then try GitHub
+        try{
+          const tokenData=await loadTokenGitHub();
+          if(tokenData&&tokenData.token&&Date.now()<tokenData.expiry){
+            localStorage.setItem("gdrive_token",tokenData.token);
+            localStorage.setItem("gdrive_token_expiry",tokenData.expiry);
+            setLocalToken(tokenData.token);
+            setToken(tokenData.token);
+          }
+        }catch(_){}
+      } else {
+        setLocalToken(token);
+      }
+    };
+    loadTok();
   },[token]);
 
   const vencido=isVencido(enc.fechaTope);
