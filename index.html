@@ -620,17 +620,17 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
         {!token?<>
           <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Conecta tu cuenta Google para guardar las boletas automáticamente.</span></div>
           <button className="btn btn-primary" onClick={conectar} disabled={connecting}>{connecting?<><span className="spinner"></span> Conectando...</>:<><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Conectar con Google Drive</>}</button>
-          <hr style={{margin:"1.2rem 0",border:"none",borderTop:"1px solid var(--gray-border)"}} />
-          <p className="section-title" style={{marginTop:0}}><i className="ti ti-robot" style={{marginRight:6,color:"var(--blue)"}} aria-hidden="true"></i>Verificación con IA</p>
-          <p className="muted" style={{marginBottom:"0.75rem"}}>Ingresa tu API key de Claude para verificar automáticamente el monto y número de boleta.</p>
-          <ApiKeyForm />
         </>:<>
           <div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Google Drive conectado</strong><p style={{fontSize:13,marginTop:3}}>Carpeta: <code>Google Drive / {FOLDER_ROOT} / {mes}</code></p><p style={{fontSize:12,marginTop:2,opacity:0.8}}>Token válido por ~55 minutos desde la última conexión</p></div></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
             <div className="stat-card"><div className="stat-label">Carpeta activa</div><div style={{fontSize:13,fontWeight:500,marginTop:4}}>{mes}</div></div>
             <div className="stat-card"><div className="stat-label">Boletas guardadas</div><div className="stat-value">{boletasOk}</div></div>
           </div>
         </>}
+        <hr style={{margin:"1.2rem 0",border:"none",borderTop:"1px solid var(--gray-border)"}} />
+        <p className="section-title" style={{marginTop:0}}><i className="ti ti-robot" style={{marginRight:6,color:"var(--blue)"}} aria-hidden="true"></i>Verificación con IA</p>
+        <p className="muted" style={{marginBottom:"0.75rem"}}>Ingresa tu API key de Claude para verificar automáticamente el monto y número de boleta.</p>
+        <ApiKeyForm />
       </div>}
     </div>
   </>);
