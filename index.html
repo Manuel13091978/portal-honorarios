@@ -101,7 +101,7 @@ const BANCOS = ["ABN AMRO","BANEFE","BBVA","BCI","BICE","CHILE","CONOSUR","CONSO
 const TIPOS_CUENTA = ["RUT","CORRIENTE","VISTA","AHORRO","CHEQUERA ELECTRONICA"];
 
 function getRedirectUri(){return "https://manuel13091978.github.io/portal-honorarios/";}
-  function getMesCarpeta(){
+function getMesCarpeta(){
   const now=new Date(),year=now.getFullYear(),month=String(now.getMonth()+1).padStart(2,"0");
   const mes=now.toLocaleString("es-CL",{month:"long"});
   return `${year}-${month}_${mes.charAt(0).toUpperCase()+mes.slice(1)}`;
@@ -364,7 +364,13 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
-        const wb=XLSX.read(ev.target.result,{type:"binary"}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws);
+        const wb=XLSX.read(ev.target.result,{type:"binary"}),ws=wb.Sheets[wb.SheetNames[0]];
+        // Check if first row is a title (not headers) - if so, skip it
+        const firstRow=XLSX.utils.sheet_to_json(ws,{header:1})[0];
+        const isTitle = firstRow && firstRow[0] && typeof firstRow[0]==="string" && !firstRow[0].toUpperCase().includes("NOMBRE") && !firstRow[0].toUpperCase().includes("RUT") && !firstRow[0].toUpperCase().includes("PROYECTO");
+        const rows=isTitle
+          ? XLSX.utils.sheet_to_json(ws,{range:1})
+          : XLSX.utils.sheet_to_json(ws);
         const parsed=parseExcelRows(rows);
         if(parsed.length===0){setXls("No se encontraron encuestadores. Verifica las columnas del archivo.");return;}
         const periodo=parsed[0]?.periodo||getMesCarpeta().replace("_"," ");
@@ -405,7 +411,7 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
       {sinContrato>0&&<div className="alert alert-warning" style={{marginBottom:"1rem"}}><i className="ti ti-alert-triangle" aria-hidden="true"></i><span><strong>{sinContrato} encuestador{sinContrato>1?"es":""}</strong> sin contrato firmado.</span></div>}
       {data.length===0&&<div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Carga una planilla Excel para comenzar. Los datos se guardarán automáticamente.</span></div>}
       <div className="tab-bar">
-        {[["resumen","Resumen","ti-layout-dashboard"],["encuestadores","Encuestadores","ti-users"],["cargar","Cargar planilla","ti-upload"],["onedrive","Google Drive","ti-brand-google-drive"]].map(([id,label,icon])=>(
+        {[["resumen","Resumen","ti-layout-dashboard"],["encuestadores","Encuestadores","ti-users"],["cargar","Cargar planilla","ti-upload"],["historial","Historial","ti-history"],["onedrive","Google Drive","ti-brand-google-drive"]].map(([id,label,icon])=>(
           <button key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}><i className={`ti ${icon}`} aria-hidden="true" style={{marginRight:4}}></i>{label}</button>
         ))}
       </div>
@@ -711,7 +717,7 @@ function EncView({enc,data,setData,token,setToken,onBack}){
               <input ref={fileRef} type="file" accept="application/pdf" style={{display:"none"}} onChange={handleFile} />
             </div>
             <button className="btn btn-primary" style={{width:"100%"}} onClick={handleSubir} disabled={uploading||authLoad}>
-              {uploading||authLoad?<><span className="spinner"></span>{authLoad?"Autenticando...":"Subiendo a OneDrive..."}</>:<><i className="ti ti-cloud-upload" aria-hidden="true"></i> Subir boleta a OneDrive</>}
+              {uploading||authLoad?<><span className="spinner"></span>{authLoad?"Autenticando...":"Subiendo a Google Drive..."}</>:<><i className="ti ti-cloud-upload" aria-hidden="true"></i> Subir boleta a Google Drive</>}
             </button>
           </>
         ):(
