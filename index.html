@@ -286,19 +286,52 @@ function App(){
     }
   };
   const setHistorial=(h)=>{setHistorialState(h);saveToStorage("planilla_historial",h);};
+
   const activarPlanilla=(id)=>{
-    const h=historial.map(p=>({...p,activa:p.id===id}));
-    const planilla=h.find(p=>p.id===id);
-    setHistorial(h);
-    if(planilla)setData(planilla.rows, false);
+    // Guardar estado actual de boletas en la planilla que estaba activa
+    const hConBoletas=historial.map(p=>{
+      if(p.activa){
+        // Sincronizar boletas actuales a la planilla que se desactiva
+        const rowsActualizadas=p.rows.map(r=>{
+          const enData=data.find(d=>d.rut===r.rut&&d.proyecto===r.proyecto);
+          return enData?{...r,boleta:enData.boleta,numBoleta:enData.numBoleta}:r;
+        });
+        return{...p,activa:false,rows:rowsActualizadas};
+      }
+      return{...p,activa:p.id===id};
+    });
+    const planilla=hConBoletas.find(p=>p.id===id);
+    setHistorial(hConBoletas);
+    if(planilla){
+      setDataState(planilla.rows);
+      saveToStorage("planilla_activa",planilla.rows);
+      const gt=loadFromStorage("github_token","");
+      if(gt)savePlanillaGitHub(planilla.rows,gt);
+    }
   };
+
   const agregarHistorial=(rows,periodo)=>{
+    // Guardar estado actual de boletas en la planilla que estaba activa antes
     const ahora=new Date();
     const fecha=ahora.toLocaleDateString("es-CL")+' '+ahora.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"});
+    const histConBoletas=historial.map(p=>{
+      if(p.activa){
+        const rowsActualizadas=p.rows.map(r=>{
+          const enData=data.find(d=>d.rut===r.rut&&d.proyecto===r.proyecto);
+          return enData?{...r,boleta:enData.boleta,numBoleta:enData.numBoleta}:r;
+        });
+        return{...p,activa:false,rows:rowsActualizadas};
+      }
+      return{...p,activa:false};
+    });
     const nueva={id:Date.now(),fecha,periodo:periodo||getMesCarpeta().replace("_"," "),rows,activa:true};
-    const h=[nueva,...historial.map(p=>({...p,activa:false}))].slice(0,6);
+    const h=[nueva,...histConBoletas].slice(0,6);
     setHistorial(h);
-    setData(rows);
+    // Reemplazar data completamente con solo la nueva planilla
+    setDataState(rows);
+    saveToStorage("planilla_activa",rows);
+    const gt=loadFromStorage("github_token","");
+    if(gt)savePlanillaGitHub(rows,gt);
   };
 
   if(view==="home")return <Home onAdmin={()=>setView("admin")} onEnc={()=>setView("encuestador")} />;
@@ -384,11 +417,16 @@ function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onL
   const fileRef=useRef();
   const mes=getMesCarpeta();
   const planillaActiva=historial.find(p=>p.activa);
-  const dataActiva=planillaActiva?planillaActiva.rows:data;
-  const totalMonto=dataActiva.reduce((s,r)=>s+r.monto,0);
-  const sinContrato=dataActiva.filter(r=>!r.contrato).length;
-  const boletasOk=dataActiva.filter(r=>r.boleta).length;
   const periodoActivo=planillaActiva?planillaActiva.periodo:mes.replace("_"," ");
+  // data ES la planilla activa — agrupar por RUT para mostrar una fila por encuestador
+  const encUnico=Object.values(data.reduce((acc,r)=>{
+    if(!acc[r.rut]){acc[r.rut]={...r,_proyectos:[{proyecto:r.proyecto,monto:r.monto,encuestas:r.encuestas}]};}
+    else{acc[r.rut]._proyectos.push({proyecto:r.proyecto,monto:r.monto,encuestas:r.encuestas});acc[r.rut].monto+=r.monto;acc[r.rut].encuestas+=r.encuestas;}
+    return acc;
+  },{}));
+  const totalMonto=encUnico.reduce((s,r)=>s+r.monto,0);
+  const sinContrato=encUnico.filter(r=>!r.contrato).length;
+  const boletasOk=encUnico.filter(r=>r.boleta).length;
 
   const handleExcel=e=>{
     const file=e.target.files[0];if(!file)return;
@@ -424,7 +462,7 @@ function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onL
         {data.length>0&&<button className="btn btn-success btn-sm" onClick={()=>descargarExcel(data)}><i className="ti ti-download"></i> Descargar Excel</button>}
       </div>
       <div className="stat-grid">
-        <div className="stat-card"><div className="stat-label">Encuestadores</div><div className="stat-value">{dataActiva.length}</div></div>
+        <div className="stat-card"><div className="stat-label">Encuestadores</div><div className="stat-value">{encUnico.length}</div></div>
         <div className="stat-card"><div className="stat-label">Monto total</div><div className="stat-value" style={{fontSize:18}}>${totalMonto.toLocaleString("es-CL")}</div></div>
         <div className="stat-card"><div className="stat-label">Boletas recibidas</div><div className="stat-value">{boletasOk} / {data.length}</div></div>
         <div className="stat-card"><div className="stat-label">Sin contrato</div><div className="stat-value" style={{color:sinContrato>0?"var(--red)":"var(--green)"}}>{sinContrato}</div></div>
@@ -437,18 +475,21 @@ function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onL
         ))}
       </div>
 
-      {tab==="resumen"&&<div className="card"><p className="section-title">Estado de boletas</p><div className="table-wrap"><table><thead><tr><th>Nombre</th><th>RUT</th><th>Proyecto</th><th>Período</th><th>Monto</th><th>Contrato</th><th>Boleta</th></tr></thead><tbody>
-        {dataActiva.map((r,i)=><tr key={i}>
-          <td style={{fontWeight:500}}>{r.nombre}</td><td><code>{r.rut}</code></td><td>{r.proyecto}</td><td>{r.periodo}</td>
+      {tab==="resumen"&&<div className="card"><p className="section-title">Estado de boletas — {periodoActivo}</p><div className="table-wrap"><table><thead><tr><th>Nombre</th><th>RUT</th><th>Proyectos</th><th>Monto total</th><th>Contrato</th><th>Boleta</th></tr></thead><tbody>
+        {encUnico.map((r,i)=><tr key={i}>
+          <td style={{fontWeight:500}}>{r.nombre}</td>
+          <td><code>{r.rut}</code></td>
+          <td style={{fontSize:12}}>{r._proyectos.map(p=>p.proyecto).join(", ")}</td>
           <td>${r.monto.toLocaleString("es-CL")}</td>
           <td>{r.contrato?<span className="badge badge-success"><i className="ti ti-check"></i> Al día</span>:<span className="badge badge-danger"><i className="ti ti-x"></i> Pendiente</span>}</td>
           <td>{r.boleta?<span className="badge badge-success"><i className="ti ti-mail"></i> {r.numBoleta}</span>:<span className="badge badge-warning">Sin enviar</span>}</td>
         </tr>)}
       </tbody></table></div></div>}
 
-      {tab==="encuestadores"&&<div className="card"><p className="section-title">Detalle encuestadores</p><div className="table-wrap"><table><thead><tr><th>Nombre</th><th>RUT</th><th>Proyecto</th><th>Encuestas</th><th>Monto</th><th>Banco</th><th>Tipo Cuenta</th><th>N° Cuenta</th></tr></thead><tbody>
-        {dataActiva.map((r,i)=><tr key={i}>
-          <td style={{fontWeight:500}}>{r.nombre}</td><td><code>{r.rut}</code></td><td>{r.proyecto}</td>
+      {tab==="encuestadores"&&<div className="card"><p className="section-title">Detalle encuestadores — {periodoActivo}</p><div className="table-wrap"><table><thead><tr><th>Nombre</th><th>RUT</th><th>Proyectos</th><th>Encuestas</th><th>Monto total</th><th>Banco</th><th>Tipo Cuenta</th><th>N° Cuenta</th></tr></thead><tbody>
+        {encUnico.map((r,i)=><tr key={i}>
+          <td style={{fontWeight:500}}>{r.nombre}</td><td><code>{r.rut}</code></td>
+          <td style={{fontSize:12}}>{r._proyectos.map(p=>p.proyecto).join(", ")}</td>
           <td style={{textAlign:"center"}}>{r.encuestas}</td><td>${r.monto.toLocaleString("es-CL")}</td>
           <td>{r.banco||"-"}</td><td>{r.tipoCuenta||"-"}</td><td><code>{r.numCuenta||"-"}</code></td>
         </tr>)}
