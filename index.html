@@ -581,13 +581,14 @@ function EncLogin({data,setData,token,setToken,onOk,onBack}){
           }
         }
       }catch(_){}
-      // Load planilla
-      if(data.length===0){
-        try{
-          const rows=await loadPlanillaGitHub();
-          if(rows&&rows.length>0)setData(rows);
-        }catch(_){}
-      }
+      // SIEMPRE cargar planilla desde GitHub para tener datos actualizados
+      try{
+        const rows=await loadPlanillaGitHub();
+        if(rows&&rows.length>0){
+          setData(rows);
+          saveToStorage("planilla_activa",rows);
+        }
+      }catch(_){}
       setCargando(false);
     };
     init();
