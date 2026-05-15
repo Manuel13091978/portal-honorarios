@@ -109,12 +109,36 @@ const TIPOS_CUENTA = ["RUT","CORRIENTE","VISTA","AHORRO","CHEQUERA ELECTRONICA"]
 // Inicializar EmailJS
 emailjs.init(EMAILJS_PUBLIC_KEY);
 
-async function enviarBoletaEmail(enc, montoTotal, proyectos, numBoleta, fileData, fileName) {
+async function guardarPDFGitHub(fileData, fileName, githubToken) {
   try {
     const bytes = new Uint8Array(fileData);
     let binary = '';
     for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const base64pdf = btoa(binary);
+    const base64 = btoa(binary);
+    const path = "boletas/" + fileName;
+    const h = {"Authorization":"token "+githubToken,"Content-Type":"application/json"};
+    let sha = null;
+    try {
+      const r = await fetch("https://api.github.com/repos/"+GITHUB_REPO+"/contents/"+path, {headers:h});
+      if(r.ok){const d=await r.json();sha=d.sha;}
+    } catch(_){}
+    const body = {message:"Boleta "+fileName, content:base64};
+    if(sha) body.sha = sha;
+    const res = await fetch("https://api.github.com/repos/"+GITHUB_REPO+"/contents/"+path, {
+      method:"PUT", headers:h, body:JSON.stringify(body)
+    });
+    if(res.ok){
+      return "https://raw.githubusercontent.com/"+GITHUB_REPO+"/main/"+path;
+    }
+    return null;
+  } catch(e) {
+    console.warn("Error guardando PDF:", e.message);
+    return null;
+  }
+}
+
+async function enviarBoletaEmail(enc, montoTotal, proyectos, numBoleta, fileData, fileName, pdfUrl) {
+  try {
     const fecha = new Date().toLocaleDateString("es-CL", {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
     const templateParams = {
       encuestador_nombre: enc.nombre,
@@ -126,6 +150,7 @@ async function enviarBoletaEmail(enc, montoTotal, proyectos, numBoleta, fileData
       banco:              enc.banco || "-",
       tipo_cuenta:        enc.tipoCuenta || "-",
       num_cuenta:         enc.numCuenta || "-",
+      link_boleta:        pdfUrl || "No disponible",
     };
     const result = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
     return { ok: result.status === 200, error: null };
@@ -651,9 +676,16 @@ function EncView({filas,data,setData,onBack}){
         const ver=await verificarBoleta(fileData,montoTotal,boletaNum,apiKey);
         if(!ver.omitida&&!ver.ok){setUpl(false);setModal({errores:ver.errores});return;}
       }
-      setMsg({text:"Enviando boleta por email...",type:"info"});
       const fileName="Boleta_"+enc.nombre.replace(/\s+/g,"_")+"_"+boletaNum+".pdf";
-      const emailResult=await enviarBoletaEmail(enc,montoTotal,proyectosStr,boletaNum,fileData,fileName);
+      // Guardar PDF en GitHub
+      let pdfUrl = null;
+      const githubToken = loadFromStorage("github_token","");
+      if(githubToken){
+        setMsg({text:"Guardando boleta en repositorio...",type:"info"});
+        pdfUrl = await guardarPDFGitHub(fileData, fileName, githubToken);
+      }
+      setMsg({text:"Enviando email...",type:"info"});
+      const emailResult=await enviarBoletaEmail(enc,montoTotal,proyectosStr,boletaNum,fileData,fileName,pdfUrl);
       if(!emailResult.ok){setMsg({text:"Error al enviar: "+emailResult.error,type:"danger"});setUpl(false);return;}
       const updated=data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:boletaNum,boletaUrl:"email"}:r);
       setData(updated);
