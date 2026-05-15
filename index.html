@@ -277,10 +277,10 @@ function App(){
   const [data,setDataState]=useState(()=>loadFromStorage("planilla_activa",[]));
   const [historial,setHistorialState]=useState(()=>loadFromStorage("planilla_historial",[]));
 
-  const setData=(rows)=>{
+  const setData=(rows,syncGitHub=true)=>{
     setDataState(rows);
     saveToStorage("planilla_activa",rows);
-    if(rows.length>0){
+    if(syncGitHub&&rows.length>0){
       const gt=loadFromStorage("github_token","");
       if(gt)savePlanillaGitHub(rows,gt);
     }
@@ -509,8 +509,7 @@ function EncLogin({data,setData,onOk,onBack}){
       try{
         const rows=await loadPlanillaGitHub();
         if(rows&&rows.length>0){
-          setData(rows);
-          saveToStorage("planilla_activa",rows);
+          setData(rows, false);
         }
       }catch(_){}
       setCargando(false);
