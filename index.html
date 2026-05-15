@@ -376,7 +376,6 @@ function App(){
     setData(rows);
   };
 
-  if(view==="home")return <Home onAdmin={()=>setView("admin")} onEnc={()=>setView("encuestador")} />;
   const setTokenAndSave = (t) => {
     setToken(t);
     if(t){
@@ -385,6 +384,7 @@ function App(){
     }
   };
 
+  if(view==="home")return <Home onAdmin={()=>setView("admin")} onEnc={()=>setView("encuestador")} />;
   if(view==="admin"){
     if(!adminAuth)return <AdminLogin onOk={()=>setAdmin(true)} onBack={()=>setView("home")} />;
     return <AdminPanel data={data} setData={setData} token={odToken} setToken={setTokenAndSave} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} />;
