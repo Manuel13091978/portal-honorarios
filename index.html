@@ -243,7 +243,7 @@ async function ensureFolders(token,mesCarpeta){
   return mesId;
 }
 
-async function verificarBoleta(fileData, montoEsperado, numBoletaIngresado){
+async function verificarBoleta(fileData, montoEsperado, numBoletaIngresado, apiKey){
   try{
     // Convert PDF to base64
     const bytes = new Uint8Array(fileData);
@@ -255,7 +255,7 @@ async function verificarBoleta(fileData, montoEsperado, numBoletaIngresado){
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        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
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
         "anthropic-dangerous-direct-browser-access": "true"
       },
@@ -433,6 +433,46 @@ function AdminLogin({onOk,onBack}){
   </>);
 }
 
+function ApiKeyForm(){
+  const saved = loadFromStorage("anthropic_key","");
+  const [key, setKey] = useState(saved ? "••••••••••••••••" : "");
+  const [saved2, setSaved2] = useState(!!saved);
+  const [editing, setEditing] = useState(!saved);
+
+  const guardar = () => {
+    if(!key.trim()||key.includes("•")){return;}
+    saveToStorage("anthropic_key", key.trim());
+    setSaved2(true);
+    setEditing(false);
+    setKey("••••••••••••••••");
+  };
+
+  if(!editing && saved2) return (
+    <div className="alert alert-success">
+      <i className="ti ti-circle-check" aria-hidden="true"></i>
+      <div>
+        <strong>API key configurada</strong>
+        <p style={{fontSize:13,marginTop:2}}>La verificación con IA está activa.</p>
+        <button className="btn btn-sm" style={{marginTop:8}} onClick={()=>{setEditing(true);setKey("");}}>
+          <i className="ti ti-edit" aria-hidden="true"></i> Cambiar key
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="form-group">
+        <label className="form-label">API Key de Claude (Anthropic)</label>
+        <input className="form-input" type="password" value={key} placeholder="sk-ant-api03-..." onChange={e=>setKey(e.target.value)} />
+      </div>
+      <button className="btn btn-primary" onClick={guardar}>
+        <i className="ti ti-check" aria-hidden="true"></i> Guardar API key
+      </button>
+    </div>
+  );
+}
+
 function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agregarHistorial,onLogout}){
   const [tab,setTab]=useState("resumen");
   const [excelMsg,setXls]=useState("");
@@ -578,8 +618,12 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
       </div>}
             {tab==="onedrive"&&<div className="card"><p className="section-title">Configuración Google Drive</p>
         {!token?<>
-          <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Conecta tu cuenta Microsoft para guardar las boletas en Google Drive / Boletas_Honorarios / {mes}.</span></div>
+          <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Conecta tu cuenta Google para guardar las boletas automáticamente.</span></div>
           <button className="btn btn-primary" onClick={conectar} disabled={connecting}>{connecting?<><span className="spinner"></span> Conectando...</>:<><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Conectar con Google Drive</>}</button>
+          <hr style={{margin:"1.2rem 0",border:"none",borderTop:"1px solid var(--gray-border)"}} />
+          <p className="section-title" style={{marginTop:0}}><i className="ti ti-robot" style={{marginRight:6,color:"var(--blue)"}} aria-hidden="true"></i>Verificación con IA</p>
+          <p className="muted" style={{marginBottom:"0.75rem"}}>Ingresa tu API key de Claude para verificar automáticamente el monto y número de boleta.</p>
+          <ApiKeyForm />
         </>:<>
           <div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Google Drive conectado</strong><p style={{fontSize:13,marginTop:3}}>Carpeta: <code>Google Drive / {FOLDER_ROOT} / {mes}</code></p><p style={{fontSize:12,marginTop:2,opacity:0.8}}>Token válido por ~55 minutos desde la última conexión</p></div></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -672,7 +716,8 @@ function EncView({filas,data,setData,token,setToken,onBack}){
 
       // Verificar boleta con IA
       setMsg({text:"Verificando boleta con IA...",type:"info"});
-      const verif = await verificarBoleta(fileBuffer, montoTotal, numBoleta.trim());
+      const apiKey = loadFromStorage("anthropic_key","");
+      const verif = await verificarBoleta(fileBuffer, montoTotal, numBoleta.trim(), apiKey);
 
       if(!verif.ok && !verif.omitida){
         const mensajeError = "⚠️ La boleta tiene discrepancias:\n" + verif.errores.join("\n") + "\n\n¿Deseas subir la boleta de todas formas?";
