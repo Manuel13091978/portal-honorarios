@@ -330,7 +330,16 @@ function App(){
   const [view,setView]=useState("home");
   const [adminAuth,setAdmin]=useState(false);
   const [encActivo,setEnc]=useState(null);
-  const [odToken,setToken]=useState(null);
+  const [odToken,setToken]=useState(()=>{
+    try{
+      const t=localStorage.getItem("gdrive_token");
+      const exp=Number(localStorage.getItem("gdrive_token_expiry")||0);
+      if(t && Date.now()<exp) return t;
+      localStorage.removeItem("gdrive_token");
+      localStorage.removeItem("gdrive_token_expiry");
+    }catch(_){}
+    return null;
+  });
 
   // Active planilla (visible to encuestadores)
   const [data,setDataState]=useState(()=>loadFromStorage("planilla_activa",[]));
@@ -368,14 +377,22 @@ function App(){
   };
 
   if(view==="home")return <Home onAdmin={()=>setView("admin")} onEnc={()=>setView("encuestador")} />;
+  const setTokenAndSave = (t) => {
+    setToken(t);
+    if(t){
+      const expiry = Date.now() + 55*60*1000;
+      try{ localStorage.setItem("gdrive_token",t); localStorage.setItem("gdrive_token_expiry",expiry); }catch(_){}
+    }
+  };
+
   if(view==="admin"){
     if(!adminAuth)return <AdminLogin onOk={()=>setAdmin(true)} onBack={()=>setView("home")} />;
-    return <AdminPanel data={data} setData={setData} token={odToken} setToken={setToken} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} />;
+    return <AdminPanel data={data} setData={setData} token={odToken} setToken={setTokenAndSave} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} />;
   }
   if(view==="encuestador"){
     if(!encActivo)return <EncLogin data={data} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
     const filas=data.filter(r=>r.rut===encActivo[0].rut);
-    return <EncView filas={filas} data={data} setData={setData} token={odToken} setToken={setToken} onBack={()=>setEnc(null)} />;
+    return <EncView filas={filas} data={data} setData={setData} token={odToken} setToken={setTokenAndSave} onBack={()=>setEnc(null)} />;
   }
 }
 
@@ -451,7 +468,15 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
 
   const conectar=async()=>{
     setC(true);
-    try{const t=await getToken();setToken(t);await ensureFolders(t,mes);}
+    try{
+      const t=await getToken();
+      setToken(t);
+      // Save token and expiry to localStorage
+      const expiry = Date.now() + 55*60*1000; // 55 minutes
+      localStorage.setItem("gdrive_token", t);
+      localStorage.setItem("gdrive_token_expiry", expiry);
+      await ensureFolders(t,mes);
+    }
     catch(e){alert("Error: "+e.message);}
     setC(false);
   };
@@ -556,7 +581,7 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
           <div className="alert alert-info" style={{marginBottom:"1rem"}}><i className="ti ti-info-circle" aria-hidden="true"></i><span>Conecta tu cuenta Microsoft para guardar las boletas en Google Drive / Boletas_Honorarios / {mes}.</span></div>
           <button className="btn btn-primary" onClick={conectar} disabled={connecting}>{connecting?<><span className="spinner"></span> Conectando...</>:<><i className="ti ti-brand-google-drive" aria-hidden="true"></i> Conectar con Google Drive</>}</button>
         </>:<>
-          <div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Google Drive conectado</strong><p style={{fontSize:13,marginTop:3}}>Carpeta: <code>Google Drive / {FOLDER_ROOT} / {mes}</code></p></div></div>
+          <div className="alert alert-success" style={{marginBottom:"1rem"}}><i className="ti ti-circle-check" aria-hidden="true"></i><div><strong>Google Drive conectado</strong><p style={{fontSize:13,marginTop:3}}>Carpeta: <code>Google Drive / {FOLDER_ROOT} / {mes}</code></p><p style={{fontSize:12,marginTop:2,opacity:0.8}}>Token válido por ~55 minutos desde la última conexión</p></div></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div className="stat-card"><div className="stat-label">Carpeta activa</div><div style={{fontSize:13,fontWeight:500,marginTop:4}}>{mes}</div></div>
             <div className="stat-card"><div className="stat-label">Boletas guardadas</div><div className="stat-value">{boletasOk}</div></div>
