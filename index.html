@@ -217,6 +217,29 @@ async function savePlanillaGitHub(rows,githubToken){
     else console.warn("Error GitHub:",await res.text());
   }catch(e){console.warn("Error GitHub:",e.message);}
 }
+async function saveTokenGitHub(tokenData, githubToken){
+  try{
+    const h={"Authorization":"token "+githubToken,"Content-Type":"application/json"};
+    const json=JSON.stringify(tokenData);
+    const base64=btoa(unescape(encodeURIComponent(json)));
+    let sha=null;
+    try{const r=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/gdrive_token.json`,{headers:h});if(r.ok){const d=await r.json();sha=d.sha;}}catch(_){}
+    const body={message:"Actualizar token",content:base64};
+    if(sha)body.sha=sha;
+    await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/gdrive_token.json`,{method:"PUT",headers:h,body:JSON.stringify(body)});
+    console.log("Token guardado en GitHub");
+  }catch(e){console.warn("Error guardando token:",e.message);}
+}
+
+async function loadTokenGitHub(){
+  try{
+    const url=`https://raw.githubusercontent.com/${GITHUB_REPO}/main/gdrive_token.json?t=${Date.now()}`;
+    const res=await fetch(url);
+    if(!res.ok)return null;
+    return await res.json();
+  }catch(e){return null;}
+}
+
 async function loadPlanillaGitHub(){
   try{
     const url=`https://raw.githubusercontent.com/${GITHUB_REPO}/main/${GITHUB_FILE}?t=${Date.now()}`;
@@ -323,7 +346,7 @@ function App(){
     return <AdminPanel data={data} setData={setData} token={odToken} setToken={setTokenAndSave} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} />;
   }
   if(view==="encuestador"){
-    if(!encActivo)return <EncLogin data={data} setData={setData} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
+    if(!encActivo)return <EncLogin data={data} setData={setData} token={odToken} setToken={setTokenAndSave} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
     const filas=data.filter(r=>r.rut===encActivo[0].rut);
     return <EncView filas={filas} data={data} setData={setData} token={odToken} setToken={setTokenAndSave} onBack={()=>setEnc(null)} />;
   }
@@ -433,6 +456,12 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
       localStorage.setItem("gdrive_token",t);
       localStorage.setItem("gdrive_token_expiry",expiry);
       await ensureFolders(t,mes);
+      // Save token to GitHub so encuestadores can use it
+      const gt=loadFromStorage("github_token","");
+      if(gt){
+        const tokenData={token:t,expiry};
+        await saveTokenGitHub(tokenData,gt);
+      }
     }catch(e){alert("Error: "+e.message);}
     setC(false);
   };
@@ -531,19 +560,37 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
   </>);
 }
 
-function EncLogin({data,setData,onOk,onBack}){
+function EncLogin({data,setData,token,setToken,onOk,onBack}){
   const [rut,setRut]=useState("");
   const [err,setErr]=useState("");
   const [cargando,setCargando]=useState(false);
 
   React.useEffect(()=>{
-    if(data.length===0){
+    const init=async()=>{
       setCargando(true);
-      loadPlanillaGitHub().then(rows=>{
-        if(rows&&rows.length>0)setData(rows);
-        setCargando(false);
-      }).catch(()=>setCargando(false));
-    }
+      // Load token from GitHub if not in localStorage
+      try{
+        const t=localStorage.getItem("gdrive_token");
+        const exp=Number(localStorage.getItem("gdrive_token_expiry")||0);
+        if(!t||Date.now()>=exp){
+          const tokenData=await loadTokenGitHub();
+          if(tokenData&&tokenData.token&&Date.now()<tokenData.expiry){
+            localStorage.setItem("gdrive_token",tokenData.token);
+            localStorage.setItem("gdrive_token_expiry",tokenData.expiry);
+            setToken(tokenData.token);
+          }
+        }
+      }catch(_){}
+      // Load planilla
+      if(data.length===0){
+        try{
+          const rows=await loadPlanillaGitHub();
+          if(rows&&rows.length>0)setData(rows);
+        }catch(_){}
+      }
+      setCargando(false);
+    };
+    init();
   },[]);
 
   const buscar=()=>{
