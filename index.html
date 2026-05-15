@@ -311,48 +311,55 @@ Si no puedes encontrar algún dato, usa null para ese campo.`
 
 async function savePlanillaToDrive(token, rows){
   try{
-    const h={Authorization:`Bearer ${token}`,"Content-Type":"application/json"};
-    // Check if planilla.json already exists
-    const q=`name='planilla_activa.json' and 'root' in parents and trashed=false`;
-    const search=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,{headers:h});
-    const data=await search.json();
+    const h={Authorization:`Bearer ${token}`};
     const json=JSON.stringify(rows);
     const blob=new Blob([json],{type:"application/json"});
-    
+    // Check if file exists
+    const q=`name='planilla_activa.json' and 'root' in parents and trashed=false`;
+    const search=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,{headers:h});
+    const data=await search.json();
+    let fileId;
     if(data.files&&data.files.length>0){
-      // Update existing file
-      const fileId=data.files[0].id;
+      fileId=data.files[0].id;
       const form=new FormData();
       form.append("metadata",new Blob(['{"name":"planilla_activa.json"}'],{type:"application/json"}));
       form.append("file",blob);
-      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,{method:"PATCH",headers:{Authorization:`Bearer ${token}`},body:form});
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,{method:"PATCH",headers:h,body:form});
     } else {
-      // Create new file
       const form=new FormData();
       form.append("metadata",new Blob(['{"name":"planilla_activa.json"}'],{type:"application/json"}));
       form.append("file",blob);
-      await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",{method:"POST",headers:{Authorization:`Bearer ${token}`},body:form});
+      const res=await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",{method:"POST",headers:h,body:form});
+      const f=await res.json();
+      fileId=f.id;
     }
-    console.log("Planilla guardada en Google Drive");
+    // Make file publicly readable
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`,{
+      method:"POST",
+      headers:{...h,"Content-Type":"application/json"},
+      body:JSON.stringify({role:"reader",type:"anyone"})
+    });
+    // Save fileId to localStorage for encuestadores
+    localStorage.setItem("planilla_drive_id", fileId);
+    console.log("Planilla guardada y publicada en Drive:", fileId);
+    return fileId;
   }catch(e){
     console.warn("No se pudo guardar planilla en Drive:", e.message);
+    return null;
   }
 }
 
-async function loadPlanillaFromDrive(token){
+async function loadPlanillaPublica(){
   try{
-    const h={Authorization:`Bearer ${token}`};
-    const q=`name='planilla_activa.json' and 'root' in parents and trashed=false`;
-    const search=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,{headers:h});
-    const data=await search.json();
-    if(data.files&&data.files.length>0){
-      const fileId=data.files[0].id;
-      const res=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{headers:h});
-      return await res.json();
-    }
-    return null;
+    const fileId=localStorage.getItem("planilla_drive_id");
+    if(!fileId) return null;
+    const res=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{
+      headers:{"Accept":"application/json"}
+    });
+    if(!res.ok) return null;
+    return await res.json();
   }catch(e){
-    console.warn("No se pudo cargar planilla desde Drive:", e.message);
+    console.warn("No se pudo cargar planilla:", e.message);
     return null;
   }
 }
@@ -397,6 +404,7 @@ function App(){
   const setData = (rows) => {
     setDataState(rows);
     saveToStorage("planilla_activa", rows);
+    if(odToken && rows.length>0) savePlanillaToDrive(odToken, rows);
   };
 
   const setHistorial = (h) => {
@@ -438,7 +446,7 @@ function App(){
     return <AdminPanel data={data} setData={setData} token={odToken} setToken={setTokenAndSave} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} />;
   }
   if(view==="encuestador"){
-    if(!encActivo)return <EncLogin data={data} setData={setData} token={odToken} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
+    if(!encActivo)return <EncLogin data={data} setData={setData} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
     const filas=data.filter(r=>r.rut===encActivo[0].rut);
     return <EncView filas={filas} data={data} setData={setData} token={odToken} setToken={setTokenAndSave} onBack={()=>setEnc(null)} />;
   }
@@ -563,7 +571,6 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
       localStorage.setItem("gdrive_token", t);
       localStorage.setItem("gdrive_token_expiry", expiry);
       await ensureFolders(t,mes);
-      // Save current planilla to Drive if exists
       if(data.length>0) await savePlanillaToDrive(t, data);
     }
     catch(e){alert("Error: "+e.message);}
@@ -685,26 +692,20 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
   </>);
 }
 
-function EncLogin({data,setData,token,onOk,onBack}){
+function EncLogin({data,setData,onOk,onBack}){
   const [rut,setRut]=useState("");
   const [err,setErr]=useState("");
   const [cargando,setCargando]=useState(false);
 
-  const buscarEnDrive = async () => {
-    if(!token) return;
-    setCargando(true);
-    try{
-      const rows = await loadPlanillaFromDrive(token);
-      if(rows && rows.length>0){
-        setData(rows);
-      }
-    }catch(_){}
-    setCargando(false);
-  };
-
   React.useEffect(()=>{
-    if(data.length===0 && token) buscarEnDrive();
-  },[token]);
+    if(data.length===0){
+      setCargando(true);
+      loadPlanillaPublica().then(rows=>{
+        if(rows&&rows.length>0) setData(rows);
+        setCargando(false);
+      }).catch(()=>setCargando(false));
+    }
+  },[]);
 
   const buscar=()=>{
     if(data.length===0){setErr("El administrador aún no ha cargado la planilla de pagos.");return;}
@@ -723,7 +724,7 @@ function EncLogin({data,setData,token,onOk,onBack}){
           <p className="muted" style={{marginTop:4}}>Ingresa tu RUT para ver tu información de pago</p>
         </div>
         <div className="form-group"><label className="form-label">RUT</label><input className="form-input" value={rut} placeholder="12345678-9" onChange={e=>{setRut(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&buscar()} />{err&&<span className="form-error">{err}</span>}</div>
-        {cargando&&<div className="alert alert-info" style={{marginBottom:"0.75rem"}}><i className="ti ti-loader" aria-hidden="true"></i><span>Cargando planilla...</span></div>}
+        {cargando&&<div className="alert alert-info" style={{marginBottom:"0.75rem"}}><i className="ti ti-loader" aria-hidden="true"></i><span>Cargando información...</span></div>}
         <button className="btn btn-primary" style={{width:"100%"}} onClick={buscar} disabled={cargando}><i className="ti ti-login" aria-hidden="true"></i> Ver mi información</button>
       </div>
     </div>
