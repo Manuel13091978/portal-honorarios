@@ -93,6 +93,9 @@ const { useState, useRef } = React;
 const GOOGLE_CLIENT_ID = "86326256028-co8gidrh6j0o7lnrl41q5nljbue303f3.apps.googleusercontent.com";
 const ADMIN_PASS  = "admin2024";
 const FOLDER_ROOT = "Boletas_Honorarios";
+const GITHUB_TOKEN = "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";
+const GITHUB_REPO  = "Manuel13091978/portal-honorarios";
+const GITHUB_FILE  = "planilla_data.json";
 const JEFE        = "Manuel Carrasco";
 const TELEFONO    = "991846932";
 const CORREO      = "f2f@enfoque360.cl";
@@ -309,59 +312,32 @@ Si no puedes encontrar algún dato, usa null para ese campo.`
   }
 }
 
-async function savePlanillaToDrive(token, rows){
+async function savePlanillaGitHub(rows){
   try{
-    const h={Authorization:`Bearer ${token}`};
+    const h={"Authorization":"token "+GITHUB_TOKEN,"Content-Type":"application/json"};
     const json=JSON.stringify(rows);
-    const blob=new Blob([json],{type:"application/json"});
-    // Check if file exists
-    const q=`name='planilla_activa.json' and 'root' in parents and trashed=false`;
-    const search=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,{headers:h});
-    const data=await search.json();
-    let fileId;
-    if(data.files&&data.files.length>0){
-      fileId=data.files[0].id;
-      const form=new FormData();
-      form.append("metadata",new Blob(['{"name":"planilla_activa.json"}'],{type:"application/json"}));
-      form.append("file",blob);
-      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,{method:"PATCH",headers:h,body:form});
-    } else {
-      const form=new FormData();
-      form.append("metadata",new Blob(['{"name":"planilla_activa.json"}'],{type:"application/json"}));
-      form.append("file",blob);
-      const res=await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",{method:"POST",headers:h,body:form});
-      const f=await res.json();
-      fileId=f.id;
-    }
-    // Make file publicly readable
-    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`,{
-      method:"POST",
-      headers:{...h,"Content-Type":"application/json"},
-      body:JSON.stringify({role:"reader",type:"anyone"})
-    });
-    // Save fileId to localStorage for encuestadores
-    localStorage.setItem("planilla_drive_id", fileId);
-    console.log("Planilla guardada y publicada en Drive:", fileId);
-    return fileId;
-  }catch(e){
-    console.warn("No se pudo guardar planilla en Drive:", e.message);
-    return null;
-  }
+    const base64=btoa(unescape(encodeURIComponent(json)));
+    // Get current SHA if file exists
+    let sha=null;
+    try{
+      const r=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`,{headers:h});
+      if(r.ok){const d=await r.json();sha=d.sha;}
+    }catch(_){}
+    const body={message:"Actualizar planilla",content:base64};
+    if(sha) body.sha=sha;
+    const res=await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`,{method:"PUT",headers:h,body:JSON.stringify(body)});
+    if(res.ok) console.log("Planilla guardada en GitHub");
+    else console.warn("Error al guardar planilla:", await res.text());
+  }catch(e){console.warn("Error GitHub:",e.message);}
 }
 
-async function loadPlanillaPublica(){
+async function loadPlanillaGitHub(){
   try{
-    const fileId=localStorage.getItem("planilla_drive_id");
-    if(!fileId) return null;
-    const res=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{
-      headers:{"Accept":"application/json"}
-    });
+    const url=`https://raw.githubusercontent.com/${GITHUB_REPO}/main/${GITHUB_FILE}?t=${Date.now()}`;
+    const res=await fetch(url);
     if(!res.ok) return null;
     return await res.json();
-  }catch(e){
-    console.warn("No se pudo cargar planilla:", e.message);
-    return null;
-  }
+  }catch(e){console.warn("Error cargando planilla:",e.message);return null;}
 }
 
 async function uploadPDF(token,fileData,fileName,mesCarpeta){
@@ -404,7 +380,7 @@ function App(){
   const setData = (rows) => {
     setDataState(rows);
     saveToStorage("planilla_activa", rows);
-    if(odToken && rows.length>0) savePlanillaToDrive(odToken, rows);
+    if(rows.length>0) savePlanillaGitHub(rows);
   };
 
   const setHistorial = (h) => {
@@ -567,11 +543,11 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
     try{
       const t=await getToken();
       setToken(t);
-      const expiry = Date.now() + 55*60*1000;
+      // Save token and expiry to localStorage
+      const expiry = Date.now() + 55*60*1000; // 55 minutes
       localStorage.setItem("gdrive_token", t);
       localStorage.setItem("gdrive_token_expiry", expiry);
       await ensureFolders(t,mes);
-      if(data.length>0) await savePlanillaToDrive(t, data);
     }
     catch(e){alert("Error: "+e.message);}
     setC(false);
@@ -700,8 +676,8 @@ function EncLogin({data,setData,onOk,onBack}){
   React.useEffect(()=>{
     if(data.length===0){
       setCargando(true);
-      loadPlanillaPublica().then(rows=>{
-        if(rows&&rows.length>0) setData(rows);
+      loadPlanillaGitHub().then(rows=>{
+        if(rows&&rows.length>0){setData(rows);}
         setCargando(false);
       }).catch(()=>setCargando(false));
     }
