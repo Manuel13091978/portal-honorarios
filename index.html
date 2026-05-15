@@ -656,7 +656,15 @@ function EncView({filas,data,setData,token,setToken,onBack}){
     if(!ctaSaved){setMsg({text:"Guarda tus datos bancarios primero.",type:"warning"});return;}
     if(!numBoleta.trim()){setMsg({text:"Ingresa el número de boleta.",type:"warning"});return;}
     if(!file){setMsg({text:"Selecciona un archivo PDF.",type:"warning"});return;}
+    // Try to get token from localStorage directly (in case it was loaded after render)
     let tok=token;
+    if(!tok){
+      try{
+        const t=localStorage.getItem("gdrive_token");
+        const exp=Number(localStorage.getItem("gdrive_token_expiry")||0);
+        if(t&&Date.now()<exp){tok=t;setToken(t);}
+      }catch(_){}
+    }
     if(!tok){setMsg({text:"El administrador debe conectar Google Drive primero. Contacta a "+JEFE+" ("+TELEFONO+")",type:"warning"});return;}
     setUpl(true);
     try{
