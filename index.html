@@ -381,17 +381,25 @@ function App(){
       }
       return{...p,activa:false};
     });
-    const nueva={id:Date.now(),fecha,periodo:periodo||getMesCarpeta().replace("_"," "),rows,activa:true};
+    // Forzar boleta:false en todos los encuestadores de la planilla nueva
+    const rowsLimpias=rows.map(r=>({...r,boleta:false,numBoleta:"",boletaUrl:""}));
+    const nueva={id:Date.now(),fecha,periodo:periodo||getMesCarpeta().replace("_"," "),rows:rowsLimpias,activa:true};
     const h=[nueva,...histActualizado].slice(0,6);
     setHistorial(h);
-    setData(rows);
+    setData(rowsLimpias);
   };
 
   if(cargandoApp)return(<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16}}><div style={{width:40,height:40,border:"3px solid var(--blue-light)",borderTop:"3px solid var(--blue)",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}></div><p style={{color:"var(--gray-muted)",fontSize:14}}>Cargando portal...</p></div>);
   if(view==="home")return <Home onAdmin={()=>setView("admin")} onEnc={()=>setView("encuestador")} />;
   if(view==="admin"){
     if(!adminAuth)return <AdminLogin onOk={()=>setAdmin(true)} onBack={()=>setView("home")} />;
-    return <AdminPanel data={data} setData={setData} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} />;
+    const refrescarAdmin=async()=>{
+      const planilla=await loadPlanillaGitHub();
+      if(planilla&&planilla.length>0)setDataState(planilla);
+      const hist=await loadHistorialGitHub();
+      if(hist&&hist.length>0)setHistorialState(hist);
+    };
+    return <AdminPanel data={data} setData={setData} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} onRefresh={refrescarAdmin} />;
   }
   if(view==="encuestador"){
     if(!encActivo)return <EncLogin data={data} setData={setData} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
@@ -445,7 +453,7 @@ function GitHubTokenForm(){
   return(<div className="alert alert-success"><i className="ti ti-circle-check"></i><div><strong>GitHub token configurado</strong><p style={{fontSize:13,marginTop:2}}>La planilla se sincroniza automáticamente con GitHub.</p></div></div>);
 }
 
-function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onLogout}){
+function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onLogout,onRefresh}){
   const [tab,setTab]=useState("resumen");
   const [excelMsg,setXls]=useState("");
   const fileRef=useRef();
@@ -487,6 +495,7 @@ function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onL
       <div className="logo"><div className="logo-icon"><i className="ti ti-report-money" style={{fontSize:18,color:"white"}}></i></div>Portal Honorarios</div>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <span className="badge badge-success" style={{fontSize:11}}><i className="ti ti-mail"></i> EmailJS activo</span>
+        <button className="btn btn-ghost btn-sm" onClick={onRefresh}><i className="ti ti-refresh"></i> Actualizar</button>
         <button className="btn btn-ghost btn-sm" onClick={onLogout}><i className="ti ti-logout"></i> Salir</button>
       </div>
     </header>
