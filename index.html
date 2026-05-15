@@ -243,13 +243,78 @@ async function ensureFolders(token,mesCarpeta){
   return mesId;
 }
 
+async function verificarBoleta(fileData, montoEsperado, numBoletaIngresado){
+  try{
+    // Convert PDF to base64
+    const bytes = new Uint8Array(fileData);
+    let binary = '';
+    for(let i=0;i<bytes.byteLength;i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": "",
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: base64 }
+            },
+            {
+              type: "text",
+              text: `Analiza esta boleta de honorarios y extrae la siguiente información. Responde SOLO con un JSON válido sin texto adicional ni backticks:
+{
+  "numeroBoleta": "número de la boleta encontrado en el documento",
+  "monto": número total de la boleta en pesos chilenos (solo el número, sin puntos ni signos),
+  "emisor": "nombre del emisor de la boleta",
+  "receptor": "nombre del receptor/empresa"
+}
+Si no puedes encontrar algún dato, usa null para ese campo.`
+            }
+          ]
+        }]
+      })
+    });
+
+    if(!response.ok) throw new Error("Error en API de verificación");
+    const data = await response.json();
+    const text = data.content[0].text;
+    const clean = text.replace(/```json|```/g,"").trim();
+    const resultado = JSON.parse(clean);
+
+    const errores = [];
+    if(resultado.numeroBoleta && String(resultado.numeroBoleta).trim() !== String(numBoletaIngresado).trim()){
+      errores.push(`Número de boleta: PDF dice "${resultado.numeroBoleta}", ingresaste "${numBoletaIngresado}"`);
+    }
+    if(resultado.monto !== null && resultado.monto !== undefined){
+      const montoPDF = Number(String(resultado.monto).replace(/[^0-9]/g,""));
+      const diff = Math.abs(montoPDF - montoEsperado);
+      if(diff > 100){
+        errores.push(`Monto: PDF dice $${montoPDF.toLocaleString("es-CL")}, se esperaba $${montoEsperado.toLocaleString("es-CL")}`);
+      }
+    }
+    return { ok: errores.length === 0, errores, resultado };
+  } catch(e) {
+    console.warn("Verificación no disponible:", e.message);
+    return { ok: true, errores: [], resultado: null, omitida: true };
+  }
+}
+
 async function uploadPDF(token,fileData,fileName,mesCarpeta){
   const mesId=await ensureFolders(token,mesCarpeta);
   const h={Authorization:`Bearer ${token}`};
   const meta=JSON.stringify({name:fileName,parents:[mesId]});
   const form=new FormData();
   form.append("metadata",new Blob([meta],{type:"application/json"}));
-  form.append("file",new Blob([fileData],{type:"application/pdf"}));
+  form.append("file",new Blob([fileData instanceof ArrayBuffer ? new Uint8Array(fileData) : [fileData]],{type:"application/pdf"}));
   const res=await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",{method:"POST",headers:h,body:form});
   if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Error ${res.status}`);}
   return await res.json();
@@ -564,11 +629,33 @@ function EncView({enc,data,setData,token,setToken,onBack}){
     if(!file){setMsg({text:"Selecciona un archivo PDF.",type:"warning"});return;}
     let tok=token;
     if(!tok){setAuth(true);setMsg({text:"Iniciando sesión con Microsoft...",type:"info"});try{tok=await getToken();setToken(tok);}catch(e){setMsg({text:"No se pudo autenticar: "+e.message,type:"danger"});setAuth(false);return;}setAuth(false);}
-    setUpl(true);setMsg({text:"Subiendo boleta a Google Drive...",type:"info"});
+    setUpl(true);
     try{
       const mes=getMesCarpeta(),nombre=enc.nombre.replace(/\s+/g,"_"),fileName=`${enc.rut}_${numBoleta.trim()}_${nombre}.pdf`;
-      await uploadPDF(tok,file,fileName,mes);
-      setDone(true);setMsg({text:`Boleta guardada en Google Drive/${FOLDER_ROOT}/${mes}`,type:"success"});
+      const fileBuffer = await file.arrayBuffer();
+
+      // Verificar boleta con IA
+      setMsg({text:"Verificando boleta con IA...",type:"info"});
+      const verif = await verificarBoleta(fileBuffer, enc.monto, numBoleta.trim());
+
+      if(!verif.ok && !verif.omitida){
+        const mensajeError = "⚠️ La boleta tiene discrepancias:\n" + verif.errores.join("\n") + "\n\n¿Deseas subir la boleta de todas formas?";
+        if(!window.confirm(mensajeError)){
+          setMsg({text:"Subida cancelada. Revisa los datos de la boleta.",type:"warning"});
+          setUpl(false);
+          return;
+        }
+      }
+
+      setMsg({text:"Subiendo boleta a Google Drive...",type:"info"});
+      await uploadPDF(tok, fileBuffer, fileName, mes);
+      setDone(true);
+      const msgExito = verif.omitida
+        ? `Boleta guardada en Google Drive/${FOLDER_ROOT}/${mes}`
+        : verif.ok
+          ? `✓ Boleta verificada y guardada en Google Drive/${FOLDER_ROOT}/${mes}`
+          : `Boleta guardada con advertencias en Google Drive/${FOLDER_ROOT}/${mes}`;
+      setMsg({text:msgExito,type:"success"});
       setData(data.map(r=>r.rut===enc.rut?{...r,boleta:true,numBoleta:numBoleta.trim()}:r));
     }catch(e){setMsg({text:"Error al subir: "+e.message,type:"danger"});}
     setUpl(false);
