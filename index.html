@@ -309,6 +309,54 @@ Si no puedes encontrar algún dato, usa null para ese campo.`
   }
 }
 
+async function savePlanillaToDrive(token, rows){
+  try{
+    const h={Authorization:`Bearer ${token}`,"Content-Type":"application/json"};
+    // Check if planilla.json already exists
+    const q=`name='planilla_activa.json' and 'root' in parents and trashed=false`;
+    const search=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,{headers:h});
+    const data=await search.json();
+    const json=JSON.stringify(rows);
+    const blob=new Blob([json],{type:"application/json"});
+    
+    if(data.files&&data.files.length>0){
+      // Update existing file
+      const fileId=data.files[0].id;
+      const form=new FormData();
+      form.append("metadata",new Blob(['{"name":"planilla_activa.json"}'],{type:"application/json"}));
+      form.append("file",blob);
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,{method:"PATCH",headers:{Authorization:`Bearer ${token}`},body:form});
+    } else {
+      // Create new file
+      const form=new FormData();
+      form.append("metadata",new Blob(['{"name":"planilla_activa.json"}'],{type:"application/json"}));
+      form.append("file",blob);
+      await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",{method:"POST",headers:{Authorization:`Bearer ${token}`},body:form});
+    }
+    console.log("Planilla guardada en Google Drive");
+  }catch(e){
+    console.warn("No se pudo guardar planilla en Drive:", e.message);
+  }
+}
+
+async function loadPlanillaFromDrive(token){
+  try{
+    const h={Authorization:`Bearer ${token}`};
+    const q=`name='planilla_activa.json' and 'root' in parents and trashed=false`;
+    const search=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,{headers:h});
+    const data=await search.json();
+    if(data.files&&data.files.length>0){
+      const fileId=data.files[0].id;
+      const res=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{headers:h});
+      return await res.json();
+    }
+    return null;
+  }catch(e){
+    console.warn("No se pudo cargar planilla desde Drive:", e.message);
+    return null;
+  }
+}
+
 async function uploadPDF(token,fileData,fileName,mesCarpeta){
   const mesId=await ensureFolders(token,mesCarpeta);
   const h={Authorization:`Bearer ${token}`};
@@ -390,7 +438,7 @@ function App(){
     return <AdminPanel data={data} setData={setData} token={odToken} setToken={setTokenAndSave} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} />;
   }
   if(view==="encuestador"){
-    if(!encActivo)return <EncLogin data={data} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
+    if(!encActivo)return <EncLogin data={data} setData={setData} token={odToken} onOk={e=>setEnc(e)} onBack={()=>setView("home")} />;
     const filas=data.filter(r=>r.rut===encActivo[0].rut);
     return <EncView filas={filas} data={data} setData={setData} token={odToken} setToken={setTokenAndSave} onBack={()=>setEnc(null)} />;
   }
@@ -511,11 +559,12 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
     try{
       const t=await getToken();
       setToken(t);
-      // Save token and expiry to localStorage
-      const expiry = Date.now() + 55*60*1000; // 55 minutes
+      const expiry = Date.now() + 55*60*1000;
       localStorage.setItem("gdrive_token", t);
       localStorage.setItem("gdrive_token_expiry", expiry);
       await ensureFolders(t,mes);
+      // Save current planilla to Drive if exists
+      if(data.length>0) await savePlanillaToDrive(t, data);
     }
     catch(e){alert("Error: "+e.message);}
     setC(false);
@@ -636,8 +685,27 @@ function AdminPanel({data,setData,token,setToken,historial,activarPlanilla,agreg
   </>);
 }
 
-function EncLogin({data,onOk,onBack}){
-  const [rut,setRut]=useState("");const [err,setErr]=useState("");
+function EncLogin({data,setData,token,onOk,onBack}){
+  const [rut,setRut]=useState("");
+  const [err,setErr]=useState("");
+  const [cargando,setCargando]=useState(false);
+
+  const buscarEnDrive = async () => {
+    if(!token) return;
+    setCargando(true);
+    try{
+      const rows = await loadPlanillaFromDrive(token);
+      if(rows && rows.length>0){
+        setData(rows);
+      }
+    }catch(_){}
+    setCargando(false);
+  };
+
+  React.useEffect(()=>{
+    if(data.length===0 && token) buscarEnDrive();
+  },[token]);
+
   const buscar=()=>{
     if(data.length===0){setErr("El administrador aún no ha cargado la planilla de pagos.");return;}
     const c=rut.trim().toLowerCase().replace(/[\s.]/g,"").replace(/-/g,"");
@@ -655,7 +723,8 @@ function EncLogin({data,onOk,onBack}){
           <p className="muted" style={{marginTop:4}}>Ingresa tu RUT para ver tu información de pago</p>
         </div>
         <div className="form-group"><label className="form-label">RUT</label><input className="form-input" value={rut} placeholder="12345678-9" onChange={e=>{setRut(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&buscar()} />{err&&<span className="form-error">{err}</span>}</div>
-        <button className="btn btn-primary" style={{width:"100%"}} onClick={buscar}><i className="ti ti-login" aria-hidden="true"></i> Ver mi información</button>
+        {cargando&&<div className="alert alert-info" style={{marginBottom:"0.75rem"}}><i className="ti ti-loader" aria-hidden="true"></i><span>Cargando planilla...</span></div>}
+        <button className="btn btn-primary" style={{width:"100%"}} onClick={buscar} disabled={cargando}><i className="ti ti-login" aria-hidden="true"></i> Ver mi información</button>
       </div>
     </div>
   </>);
@@ -851,10 +920,6 @@ function EncView({filas,data,setData,token,setToken,onBack}){
             <div style={{fontWeight:500,marginTop:4,color:"var(--blue)"}}>{enc.proyecto}</div>
           </div>
         )}
-        <div style={{background:"var(--blue-dark)",borderRadius:"var(--radius)",padding:"16px",marginTop:12,textAlign:"center"}}>
-          <p style={{color:"rgba(255,255,255,0.7)",fontSize:12,marginBottom:4}}>MONTO TOTAL A EMITIR EN BOLETA</p>
-          <p style={{color:"white",fontSize:32,fontWeight:700,letterSpacing:"-0.5px"}}>${montoTotal.toLocaleString("es-CL")}</p>
-        </div>
       </div>
 
       {/* Datos tributarios */}
@@ -949,7 +1014,10 @@ function EncView({filas,data,setData,token,setToken,onBack}){
               </div>
             ))}
             <p style={{fontSize:13,color:"var(--gray-muted)",margin:"1rem 0"}}>¿Deseas subir la boleta de todas formas?</p>
-            <button className="btn btn-primary" style={{width:"100%"}} onClick={cancelarSubida}><i className="ti ti-check" aria-hidden="true"></i> Entendido, corregiré la boleta</button>
+            <div style={{display:"flex",gap:10}}>
+              <button className="btn btn-sm" style={{flex:1}} onClick={cancelarSubida}><i className="ti ti-x" aria-hidden="true"></i> Cancelar</button>
+              <button className="btn btn-sm btn-primary" style={{flex:1}} onClick={confirmarSubida}><i className="ti ti-upload" aria-hidden="true"></i> Subir igual</button>
+            </div>
           </div>
         </div>
       )}
