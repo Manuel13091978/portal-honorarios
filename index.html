@@ -851,6 +851,10 @@ function EncView({filas,data,setData,token,setToken,onBack}){
             <div style={{fontWeight:500,marginTop:4,color:"var(--blue)"}}>{enc.proyecto}</div>
           </div>
         )}
+        <div style={{background:"var(--blue-dark)",borderRadius:"var(--radius)",padding:"16px",marginTop:12,textAlign:"center"}}>
+          <p style={{color:"rgba(255,255,255,0.7)",fontSize:12,marginBottom:4}}>MONTO TOTAL A EMITIR EN BOLETA</p>
+          <p style={{color:"white",fontSize:32,fontWeight:700,letterSpacing:"-0.5px"}}>${montoTotal.toLocaleString("es-CL")}</p>
+        </div>
       </div>
 
       {/* Datos tributarios */}
@@ -945,10 +949,7 @@ function EncView({filas,data,setData,token,setToken,onBack}){
               </div>
             ))}
             <p style={{fontSize:13,color:"var(--gray-muted)",margin:"1rem 0"}}>¿Deseas subir la boleta de todas formas?</p>
-            <div style={{display:"flex",gap:10}}>
-              <button className="btn btn-sm" style={{flex:1}} onClick={cancelarSubida}><i className="ti ti-x" aria-hidden="true"></i> Cancelar</button>
-              <button className="btn btn-sm btn-primary" style={{flex:1}} onClick={confirmarSubida}><i className="ti ti-upload" aria-hidden="true"></i> Subir igual</button>
-            </div>
+            <button className="btn btn-primary" style={{width:"100%"}} onClick={cancelarSubida}><i className="ti ti-check" aria-hidden="true"></i> Entendido, corregiré la boleta</button>
           </div>
         </div>
       )}
