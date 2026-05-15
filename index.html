@@ -510,6 +510,8 @@ function EncLogin({data,setData,onOk,onBack}){
         const rows=await loadPlanillaGitHub();
         if(rows&&rows.length>0){
           setData(rows, false);
+          // Si ya hay un RUT ingresado, buscar automáticamente con datos frescos
+          if(rut.trim()) buscar(rows);
         }
       }catch(_){}
       setCargando(false);
@@ -517,10 +519,11 @@ function EncLogin({data,setData,onOk,onBack}){
     init();
   },[]);
 
-  const buscar=()=>{
-    if(data.length===0){setErr("El administrador aún no ha cargado la planilla de pagos.");return;}
+  const buscar=(datosActuales)=>{
+    const d=datosActuales||data;
+    if(d.length===0){setErr("El administrador aún no ha cargado la planilla de pagos.");return;}
     const c=rut.trim().toLowerCase().replace(/[\s.]/g,"").replace(/-/g,"");
-    const filas=data.filter(r=>{const rc=r.rut.toLowerCase().replace(/[\s.]/g,"").replace(/-/g,"");return rc===c;});
+    const filas=d.filter(r=>{const rc=r.rut.toLowerCase().replace(/[\s.]/g,"").replace(/-/g,"");return rc===c;});
     if(filas.length>0)onOk(filas);
     else setErr("RUT no encontrado. Verifica el formato (ej: 14541963-8)");
   };
@@ -535,8 +538,10 @@ function EncLogin({data,setData,onOk,onBack}){
           <p className="muted" style={{marginTop:4}}>Ingresa tu RUT para ver tu información de pago</p>
         </div>
         <div className="form-group"><label className="form-label">RUT</label><input className="form-input" value={rut} placeholder="12345678-9" onChange={e=>{setRut(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&buscar()} />{err&&<span className="form-error">{err}</span>}</div>
-        {cargando&&<div className="alert alert-info" style={{marginBottom:"0.75rem"}}><i className="ti ti-loader"></i><span>Cargando información...</span></div>}
-        <button className="btn btn-primary" style={{width:"100%"}} onClick={buscar} disabled={cargando}><i className="ti ti-login"></i> Ver mi información</button>
+        {cargando&&<div className="alert alert-info" style={{marginBottom:"0.75rem"}}><i className="ti ti-loader"></i><span>Sincronizando datos... espera un momento</span></div>}
+        <button className="btn btn-primary" style={{width:"100%"}} onClick={()=>buscar(null)} disabled={cargando}>
+          {cargando?<><span className="spinner"></span> Cargando...</>:<><i className="ti ti-login"></i> Ver mi información</>}
+        </button>
       </div>
     </div>
   </>);
