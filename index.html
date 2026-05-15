@@ -100,6 +100,8 @@ const EMAILJS_PUBLIC_KEY  = "Hs0qLbSLzgurFm6Op";
 const ADMIN_PASS   = "admin2024";
 const GITHUB_REPO  = "Manuel13091978/portal-honorarios";
 const GITHUB_FILE  = "planilla_data.json";
+const GITHUB_TOKEN = "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";
+const ANTHROPIC_KEY = "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";
 const JEFE         = "Manuel Carrasco";
 const TELEFONO     = "991846932";
 const CORREO       = "f2f@enfoque360.cl";
@@ -322,8 +324,7 @@ function App(){
   // Al iniciar, cargar todo desde GitHub
   React.useEffect(()=>{
     const init=async()=>{
-      const gt=localStorage.getItem("github_token")||"";
-      if(gt){
+      if(GITHUB_TOKEN){
         const [planilla,hist]=await Promise.all([loadPlanillaGitHub(),loadHistorialGitHub()]);
         if(planilla&&planilla.length>0)setDataState(planilla);
         if(hist&&hist.length>0)setHistorialState(hist);
@@ -337,16 +338,16 @@ function App(){
     init();
   },[]);
 
-  const gt=()=>localStorage.getItem("github_token")||"";
+  const gt=()=>GITHUB_TOKEN;
 
   const setData=(rows)=>{
     setDataState(rows);
-    if(gt())savePlanillaGitHub(rows,gt());
+    if(GITHUB_TOKEN)savePlanillaGitHub(rows,GITHUB_TOKEN);
   };
 
   const setHistorial=(h)=>{
     setHistorialState(h);
-    if(gt())saveHistorialGitHub(h,gt());
+    if(GITHUB_TOKEN)saveHistorialGitHub(h,GITHUB_TOKEN);
   };
 
   const activarPlanilla=(id)=>{
@@ -437,31 +438,11 @@ function AdminLogin({onOk,onBack}){
 }
 
 function ApiKeyForm(){
-  const saved=loadFromStorage("anthropic_key","");
-  const [key,setKey]=useState(saved?"••••••••••••••••":"");
-  const [saved2,setSaved2]=useState(!!saved);
-  const [editing,setEditing]=useState(!saved);
-  const guardar=()=>{
-    if(!key.trim()||key.includes("•"))return;
-    saveToStorage("anthropic_key",key.trim());
-    setSaved2(true);setEditing(false);setKey("••••••••••••••••");
-  };
-  if(!editing&&saved2)return(<div className="alert alert-success"><i className="ti ti-circle-check"></i><div><strong>API key configurada</strong><p style={{fontSize:13,marginTop:2}}>La verificación con IA está activa.</p><button className="btn btn-sm" style={{marginTop:8}} onClick={()=>{setEditing(true);setKey("");}}><i className="ti ti-edit"></i> Cambiar key</button></div></div>);
-  return(<div><div className="form-group"><label className="form-label">API Key de Claude (Anthropic)</label><input className="form-input" type="password" value={key} placeholder="sk-ant-api03-..." onChange={e=>setKey(e.target.value)} /></div><button className="btn btn-primary" onClick={guardar}><i className="ti ti-check"></i> Guardar API key</button></div>);
+  return(<div className="alert alert-success"><i className="ti ti-circle-check"></i><div><strong>API key configurada</strong><p style={{fontSize:13,marginTop:2}}>La verificación con IA está activa.</p></div></div>);
 }
 
 function GitHubTokenForm(){
-  const saved=localStorage.getItem("github_token")||"";
-  const [key,setKey]=useState(saved?"••••••••••••••••":"");
-  const [saved2,setSaved2]=useState(!!saved);
-  const [editing,setEditing]=useState(!saved);
-  const guardar=()=>{
-    if(!key.trim()||key.includes("•"))return;
-    localStorage.setItem("github_token",key.trim());
-    setSaved2(true);setEditing(false);setKey("••••••••••••••••");
-  };
-  if(!editing&&saved2)return(<div className="alert alert-success"><i className="ti ti-circle-check"></i><div><strong>GitHub token configurado</strong><p style={{fontSize:13,marginTop:2}}>La planilla se sincroniza automáticamente.</p><button className="btn btn-sm" style={{marginTop:8}} onClick={()=>{setEditing(true);setKey("");}}><i className="ti ti-edit"></i> Cambiar token</button></div></div>);
-  return(<div><div className="form-group"><label className="form-label">GitHub Personal Access Token</label><input className="form-input" type="password" value={key} placeholder="ghp_..." onChange={e=>setKey(e.target.value)} /></div><button className="btn btn-primary" onClick={guardar}><i className="ti ti-check"></i> Guardar token</button></div>);
+  return(<div className="alert alert-success"><i className="ti ti-circle-check"></i><div><strong>GitHub token configurado</strong><p style={{fontSize:13,marginTop:2}}>La planilla se sincroniza automáticamente con GitHub.</p></div></div>);
 }
 
 function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onLogout}){
@@ -697,7 +678,7 @@ function EncView({filas,data,setData,onBack}){
     setMsg({text:"",type:""});
     try{
       const fileData=await f.arrayBuffer();
-      const apiKey=loadFromStorage("anthropic_key","");
+      const apiKey=ANTHROPIC_KEY;
       if(apiKey){
         setMsg({text:"Verificando boleta con IA...",type:"info"});
         const ver=await verificarBoleta(fileData,montoTotal,boletaNum,apiKey);
@@ -706,7 +687,7 @@ function EncView({filas,data,setData,onBack}){
       const fileName="Boleta_"+enc.nombre.replace(/\s+/g,"_")+"_"+boletaNum+".pdf";
       // Guardar PDF en GitHub
       let pdfUrl = null;
-      const githubToken = localStorage.getItem("github_token")||"";
+      const githubToken = GITHUB_TOKEN;
       if(githubToken){
         setMsg({text:"Guardando boleta en repositorio...",type:"info"});
         pdfUrl = await guardarPDFGitHub(fileData, fileName, githubToken);
