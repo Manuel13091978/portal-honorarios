@@ -317,6 +317,7 @@ Si el documento NO es una boleta de honorarios, responde con esBoleta:false y el
     console.warn("Verificación no disponible:",e.message);
     // Si falla la verificación, NO permitir la subida
     return{ok:false,errores:["No se pudo verificar el documento. Asegúrate de subir un PDF válido de tu boleta de honorarios."],resultado:null};
+  }
 }
 
 // Solo guardar tokens en localStorage
