@@ -408,10 +408,12 @@ function App(){
   if(view==="admin"){
     if(!adminAuth)return <AdminLogin onOk={()=>setAdmin(true)} onBack={()=>setView("home")} />;
     const refrescarAdmin=async()=>{
-      const planilla=await loadPlanillaGitHub();
+      // Esperar 2 segundos para que GitHub termine de guardar
+      await new Promise(r=>setTimeout(r,2000));
+      const [planilla,hist]=await Promise.all([loadPlanillaGitHub(),loadHistorialGitHub()]);
       if(planilla&&planilla.length>0)setDataState(planilla);
-      const hist=await loadHistorialGitHub();
       if(hist&&hist.length>0)setHistorialState(hist);
+      else if(hist===null||hist?.length===0)setHistorialState([]);
     };
     return <AdminPanel data={data} setData={setData} historial={historial} activarPlanilla={activarPlanilla} agregarHistorial={agregarHistorial} onLogout={()=>{setAdmin(false);setView("home");}} onRefresh={refrescarAdmin} />;
   }
@@ -467,6 +469,18 @@ function GitHubTokenForm(){
   return(<div className="alert alert-success"><i className="ti ti-circle-check"></i><div><strong>GitHub token configurado</strong><p style={{fontSize:13,marginTop:2}}>La planilla se sincroniza automáticamente con GitHub.</p></div></div>);
 }
 
+function RefreshButton({onRefresh}){
+  const [loading,setLoading]=React.useState(false);
+  const click=async()=>{
+    setLoading(true);
+    await onRefresh();
+    setLoading(false);
+  };
+  return(<button className="btn btn-ghost btn-sm" onClick={click} disabled={loading}>
+    {loading?<><span className="spinner"></span> Actualizando...</>:<><i className="ti ti-refresh"></i> Actualizar</>}
+  </button>);
+}
+
 function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onLogout,onRefresh}){
   const [tab,setTab]=useState("resumen");
   const [excelMsg,setXls]=useState("");
@@ -509,7 +523,7 @@ function AdminPanel({data,setData,historial,activarPlanilla,agregarHistorial,onL
       <div className="logo"><div className="logo-icon"><i className="ti ti-report-money" style={{fontSize:18,color:"white"}}></i></div>Portal Honorarios</div>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <span className="badge badge-success" style={{fontSize:11}}><i className="ti ti-mail"></i> EmailJS activo</span>
-        <button className="btn btn-ghost btn-sm" onClick={onRefresh}><i className="ti ti-refresh"></i> Actualizar</button>
+        <RefreshButton onRefresh={onRefresh} />
         <button className="btn btn-ghost btn-sm" onClick={onLogout}><i className="ti ti-logout"></i> Salir</button>
       </div>
     </header>
