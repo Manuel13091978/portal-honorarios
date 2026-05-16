@@ -283,7 +283,15 @@ async function verificarBoleta(fileData,montoEsperado,numBoletaIngresado,apiKey)
     const response=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:`Analiza esta boleta de honorarios y extrae la siguiente información. Responde SOLO con un JSON válido sin texto adicional ni backticks:\n{\n "numeroBoleta": "número de la boleta encontrado en el documento",\n "monto": el valor del campo Total Honorarios en pesos chilenos (solo el número, sin puntos ni signos). NO uses el campo Total que descuenta impuestos,\n "emisor": "nombre del emisor de la boleta",\n "receptor": "nombre del receptor/empresa"\n}\nSi no puedes encontrar algún dato, usa null para ese campo.`}]}]})
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:`Analiza este documento. Primero determina si es una boleta de honorarios chilena válida. Responde SOLO con un JSON válido sin texto adicional ni backticks:
+{
+ "esBoleta": true o false (true solo si es una boleta de honorarios chilena),
+ "numeroBoleta": "número de la boleta encontrado en el documento o null",
+ "monto": el valor del campo "Total Honorarios" en pesos chilenos como número entero sin puntos ni signos. NO uses el campo "Total" que tiene descuento de impuestos. Si no existe "Total Honorarios" usa el monto bruto principal,
+ "emisor": "nombre del emisor o null",
+ "receptor": "nombre del receptor/empresa o null"
+}
+Si el documento NO es una boleta de honorarios, responde con esBoleta:false y el resto en null.`}]}]})
     });
     if(!response.ok)throw new Error("Error en API de verificación");
     const data=await response.json();
@@ -291,6 +299,11 @@ async function verificarBoleta(fileData,montoEsperado,numBoletaIngresado,apiKey)
     const clean=text.replace(/```json|```/g,"").trim();
     const resultado=JSON.parse(clean);
     const errores=[];
+    // Verificar que sea una boleta de honorarios
+    if(!resultado.esBoleta){
+      errores.push("El documento no es una boleta de honorarios válida. Debes subir tu boleta de honorarios en formato PDF.");
+      return{ok:false,errores,resultado};
+    }
     if(resultado.numeroBoleta&&String(resultado.numeroBoleta).trim()!==String(numBoletaIngresado).trim()){
       errores.push(`Número de boleta: PDF dice "${resultado.numeroBoleta}", ingresaste "${numBoletaIngresado}"`);
     }
@@ -302,8 +315,8 @@ async function verificarBoleta(fileData,montoEsperado,numBoletaIngresado,apiKey)
     return{ok:errores.length===0,errores,resultado};
   }catch(e){
     console.warn("Verificación no disponible:",e.message);
-    return{ok:true,errores:[],resultado:null,omitida:true};
-  }
+    // Si falla la verificación, NO permitir la subida
+    return{ok:false,errores:["No se pudo verificar el documento. Asegúrate de subir un PDF válido de tu boleta de honorarios."],resultado:null};
 }
 
 // Solo guardar tokens en localStorage
